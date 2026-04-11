@@ -1,0 +1,19 @@
+# Secrets — never commit these
+.env
+.env.*
+*.credentials.json
+.credentials.json
+
+# MCP config contains API tokens — commit only the template version
+.mcp.json
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude internal
+.claude/
