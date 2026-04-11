@@ -15,5 +15,7 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Claude internal
-.claude/
+# Claude — exclude session/cache data but track skill commands
+.claude/cache/
+.claude/sessions/
+.claude/history*
