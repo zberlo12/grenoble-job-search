@@ -104,7 +104,26 @@ Only process listings that are not already in Notion.
 
 ## Step 5 — Analyse Each New Listing
 
-Apply the same criteria as the `/job-search` skill for each new listing:
+Apply the same criteria as the `/job-search` skill for each new listing.
+
+**Rescue gate (apply FIRST)**: Alert emails and Indeed postings routinely omit salary, hybrid policy, and full scope. Do NOT downgrade plausible finance matches to C or Skip just because the listing is incomplete.
+
+If ALL of the following are true:
+1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level)
+2. Location is 🟢 Green, 🟡 Yellow, or 🌐 Remote
+3. No hard disqualifier (Paris on-site, explicitly junior, wrong function, salary stated below €45K)
+
+...AND any of Salary, Hybrid policy, Full scope, or Company name is missing, route the listing to the review queue:
+- `Status = "Needs Info"`
+- `Priority = B` (provisional)
+- `Missing Info` — populate with the fields that are missing
+- `Notes` — start with `"QUEUED:"` followed by a one-line summary of what is needed
+
+Only if the listing has enough information to rank it does Step 5 proceed to the standard A/B/C/Skip assignment below.
+
+---
+
+### Standard priority criteria
 
 **Candidate profile**: Finance Director / FP&A, Grenoble base, English preference, salary floor €55K
 
@@ -149,42 +168,58 @@ Properties (SQLite format):
 | `Salary` | as stated or `"Not stated"` |
 | `Priority` | `A` / `B` / `C` (omit if Skip) |
 | `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Assess` |
+| `Status` | `To Assess` for ranked listings, or `Needs Info` if rescue gate applied |
 | `date:Date Added:start` | today as ISO string e.g. `"2026-04-12"` |
 | `Job URL` | URL string if available |
 | `Gmail Thread URL` | `https://mail.google.com/mail/u/0/#all/[threadId]` if from Gmail |
 | `Red Flags` | JSON array string e.g. `"[\"Low salary\"]"` — from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope` |
-| `Notes` | 2–3 sentence analysis |
+| `Missing Info` | JSON array string e.g. `"[\"Salary\", \"Hybrid policy\"]"` — from: `Salary`, `Hybrid policy`, `Scope`, `Full JD`, `Company name`. Populate when rescue gate applied |
+| `Notes` | 2–3 sentence analysis; if rescue gate applied, start with `"QUEUED:"` |
 | `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` |
 
 ---
 
-## Step 7 — Daily Digest
+## Step 7 — Append Digest to Daily Scans Archive
 
-After processing all listings, output a brief digest:
+After processing all listings, append a new dated section to the **Daily Scans** Notion page.
 
-```
+**Daily Scans page ID:** `3402fc3ca02a8169a12ff95493a54064`
+
+Call `mcp__claude_ai_Notion__notion-update-page` with `command: "insert_content_after"`, targeting the last block of the page, with Markdown content in the following format:
+
+```markdown
 ## Job Alert Scan — [DATE]
 
-**New listings found:** [N]
-**Already in Notion (skipped):** [N]
-**Written to Notion:** [N]
+**New listings found:** [N]  ·  **Already in Notion (skipped):** [N]  ·  **Written to Notion:** [N]  ·  **Queued for review:** [N]
 
 ### By Priority
-🟢 A: [N] — [titles if any]
-🟡 B: [N] — [titles if any]
-🔴 C: [N]
-⛔ Skip: [N]
+- 🟢 A: [N] — [titles if any]
+- 🟡 B: [N] — [titles if any]
+- 🔴 C: [N]
+- ⏸️ Needs Info: [N]
+- ⛔ Skip: [N]
 
 ### Sources
-[Breakdown by source: LinkedIn N, Indeed N, etc.]
+[Breakdown: LinkedIn N, Indeed Grenoble N, Indeed Remote N, APEC N, WTTJ N, etc.]
+
+### Needs Info Queue (added today)
+- [Title] @ [Company] — missing: [Salary, Hybrid policy, ...]
+- [Title] @ [Company] — missing: [Full JD]
 
 ### Notable Listings
-[2–3 bullet points for any Priority A finds, or interesting B listings]
+- [2–3 bullet points for any Priority A finds, or interesting B listings]
+
+---
 ```
 
-If no new listings were found, output:
-```
+If no new listings were found, append instead:
+
+```markdown
 ## Job Alert Scan — [DATE]
+
 No new job listings found in alerts for this date.
+
+---
 ```
+
+The trailing `---` separator keeps day boundaries clear in the archive.

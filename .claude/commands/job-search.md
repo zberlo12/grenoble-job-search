@@ -102,9 +102,43 @@ Check for and clearly state any of the following. Be blunt — if there is a pro
 
 ---
 
-## Step 5 — Priority Rating
+## Step 5 — Rescue Gate (before priority)
 
-Assign one of:
+Alert emails, LinkedIn digests, and Indeed postings frequently omit salary, hybrid policy, or full scope.
+Do NOT downgrade plausible finance matches to C or Skip just because the listing is incomplete.
+
+**Apply the rescue gate first.** If ALL of the following are true:
+
+1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level)
+2. Location is 🟢 Green, 🟡 Yellow, or 🌐 Remote
+3. No hard disqualifier is present (see below)
+
+...AND any of the following is missing:
+
+- Salary
+- Hybrid policy (for Yellow zone)
+- Full scope / job description
+- Company name (agency opacity)
+
+Then route the listing to the **review queue** instead of rejecting it:
+
+- `Status = "Needs Info"`
+- `Priority = B` (provisional)
+- `Missing Info` — populate with the fields that are missing
+- `Notes` — start with `"QUEUED:"` followed by a one-line summary of what information is needed
+
+**Hard disqualifiers still force Skip** (rescue gate does NOT apply):
+
+- Paris or other Red-zone city, on-site only
+- Role explicitly junior (comptable, assistant CDG, junior analyst, stagiaire)
+- Wrong function entirely (sales, engineering, HR, etc.)
+- Salary explicitly stated below €45K
+
+---
+
+## Step 5b — Priority Rating
+
+If the rescue gate did NOT apply (i.e. the listing has enough information to rank), assign one of:
 
 **🟢 Priority A** — Strong match: senior finance/FP&A role, Green or Yellow zone, CDI, English exposure or Tier A company, salary at or above €55K. Apply with custom CV.
 
@@ -191,11 +225,12 @@ Properties (SQLite format):
 | `Salary` | as stated, or `"Not stated"` |
 | `Priority` | `A` / `B` / `C` (omit if Skip) |
 | `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Assess` |
+| `Status` | `To Assess` for ranked listings, or `Needs Info` if the rescue gate applied |
 | `date:Date Added:start` | today's date as ISO string e.g. `"2026-04-12"` |
 | `Job URL` | URL string if available |
 | `Red Flags` | JSON array string e.g. `"[\"Low salary\", \"Far location\"]"` — use values from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope` |
-| `Notes` | the "Why" paragraph from Step 7 (string) |
+| `Missing Info` | JSON array string e.g. `"[\"Salary\", \"Hybrid policy\"]"` — from: `Salary`, `Hybrid policy`, `Scope`, `Full JD`, `Company name`. Populate when rescue gate applied; otherwise `"[]"` or omit |
+| `Notes` | the "Why" paragraph from Step 7; if rescue gate applied, start with `"QUEUED:"` |
 | `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` |
 
 Confirm to the user once the row is written, with a link to the Notion entry.
