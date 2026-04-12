@@ -46,28 +46,33 @@ Read the full content of each matching email thread using `gmail_read_thread`.
 
 ---
 
-## Step 2b — Indeed Direct Search
+## Step 2b — Indeed Direct Search (Grenoble area)
 
-Search Indeed for new listings using `mcp__claude_ai_Indeed__search_jobs` with location `"Grenoble, France"`.
-Run one search per title group below. Collect all job IDs returned, then use `mcp__claude_ai_Indeed__get_job_details` for any title that looks relevant before deduplification.
+Call `mcp__claude_ai_Indeed__search_jobs` with `location: "Grenoble, France"`, `country_code: "FR"`, `job_type: "fulltime"`.
 
-**French title searches:**
-- `Contrôleur de Gestion` / `Responsable Contrôle de Gestion`
-- `Finance Business Partner` / `Responsable Administratif et Financier`
-- `Responsable Comptabilité` / `Chef Comptable`
-- `Responsable P2P` / `Responsable Procure-to-Pay`
-- `Acheteur Senior` / `Responsable Achats`
-- `Demand Planner` / `Supply Chain Planner` / `Responsable Supply Chain`
-- `Directeur Financier` / `RAF`
+Run these 5 grouped searches (OR syntax combines titles into one API call):
 
-**English title searches:**
-- `Financial Controller` / `Finance Manager`
-- `Accounting Manager` / `Cost Controller`
-- `FP&A Manager` / `Finance Business Partner`
-- `P2P Manager` / `Procurement Manager`
-- `Senior Buyer` / `Supply Chain Manager`
+1. `"Contrôleur de Gestion OR Financial Controller OR FP&A Manager OR Finance Business Partner OR Responsable Contrôle de Gestion"`
+2. `"Responsable Administratif Financier OR RAF OR Directeur Financier OR Finance Manager OR Accounting Manager"`
+3. `"Cost Controller OR Contrôleur de Gestion Industriel OR Responsable Comptabilité OR Chef Comptable"`
+4. `"Responsable P2P OR Responsable Procure-to-Pay OR P2P Manager OR Procurement Manager OR Responsable Achats OR Acheteur Senior"`
+5. `"Demand Planner OR Supply Chain Planner OR Responsable Supply Chain OR Supply Chain Manager OR Senior Buyer"`
 
-Add all retrieved listings to the pool for deduplication in Step 4.
+---
+
+## Step 2c — Indeed Direct Search (Remote / France-wide)
+
+Call `mcp__claude_ai_Indeed__search_jobs` with `location: "remote"`, `country_code: "FR"`, `job_type: "fulltime"`.
+
+Run these 3 grouped searches:
+
+1. `"Finance Director OR Directeur Financier OR Financial Controller OR FP&A Manager OR Finance Manager"`
+2. `"Finance Business Partner OR Head of Finance OR VP Finance OR Finance Transformation"`
+3. `"P2P Manager OR Responsable P2P OR Procurement Manager OR Finance Governance OR Responsable Procure-to-Pay"`
+
+Add all results from Steps 2b and 2c to the pool for deduplication in Step 4.
+
+**Note on remote results:** For Step 2c listings, the location zone assessment in Step 5 should default to 🌐 Remote — assess on role fit alone, not commute.
 
 ---
 
