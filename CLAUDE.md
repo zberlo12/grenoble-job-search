@@ -61,11 +61,10 @@ allowed-tools: comma-separated list of MCP tool IDs
 **Already connected** (via claude.ai — no local config needed):
 - `mcp__claude_ai_Gmail__*` — Gmail search, read messages/threads
 - `mcp__claude_ai_Indeed__*` — job search, job detail fetch
+- `mcp__claude_ai_Notion__*` — read/write Notion databases (active integration)
 
-**Requires local setup** (copy `.mcp.json.template` → `.mcp.json`, add token):
-- `mcp__notion__*` — read/write Notion databases
-
-Notion setup: [notion.so/my-integrations](https://www.notion.so/my-integrations) → create integration → share each DB with it → paste `secret_...` token into `.mcp.json`.
+**Local backup** (`.mcp.json` has token — `mcp__notion__*` tools if local server runs):
+The `.mcp.json` file contains the Notion API token and local MCP server config. The claude.ai Notion integration (`mcp__claude_ai_Notion__*`) is what's confirmed working in all skills — use those tool names.
 
 ## Candidate Profile (used in both skills)
 

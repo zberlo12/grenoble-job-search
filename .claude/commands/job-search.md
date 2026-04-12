@@ -1,7 +1,7 @@
 ---
 description: Analyse a job listing for a Finance Director / FP&A job search in the Grenoble region. Ranks priority (A/B/C), recommends CV approach, identifies red flags, and logs to Notion. Trigger with /job-search or when the user pastes a job description or says "analyse this job/listing/role".
 argument-hint: Paste the full job listing text, or provide a URL
-allowed-tools: mcp__notion__create_page, mcp__notion__query_database, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Indeed__search_jobs
+allowed-tools: mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Indeed__search_jobs
 ---
 
 # Job Search Analyser
@@ -159,23 +159,43 @@ Respond with a concise structured assessment:
 
 ## Step 8 — Log to Notion
 
-After delivering the analysis, write a new row to the Notion Job Applications database.
+After delivering the analysis, log to the Job Applications database.
 
-Use the Notion MCP `create_page` tool with the database ID from the project configuration.
+**Database IDs:**
+- Database: `09b29be7bb764b16b173321f469b01e2`
+- Data source: `73c7671a-f600-40a1-807a-83375c3160a9`
 
-Fields to write:
-- **Job Title**: extracted title
-- **Company**: company name
-- **Source**: where it came from
-- **Location**: city + dept
-- **Salary**: as stated, or "Not stated"
-- **Priority**: A / B / C / Skip
-- **CV Approach**: as determined above
-- **Status**: "To Assess" (default for new entries)
-- **Date Added**: today's date
-- **Job URL**: if available
-- **Red Flags**: list from Step 4
-- **Notes**: the full "Why" section from Step 6
-- **English**: checked if English mentioned
+**Step 8a — Deduplication check**
 
-If Notion MCP is not yet configured, inform the user that logging will be available once Notion setup is complete, and display the data that would be written.
+Before creating, call `mcp__claude_ai_Notion__notion-search` to check whether this listing already exists:
+- If a Job URL is available, search for it
+- If no URL, search for `[Company] [Job Title]`
+
+If a match is found, tell the user and skip creation.
+
+**Step 8b — Create the entry**
+
+Call `mcp__claude_ai_Notion__notion-create-pages` with:
+```
+parent: { type: "data_source_id", data_source_id: "73c7671a-f600-40a1-807a-83375c3160a9" }
+```
+
+Properties (SQLite format):
+
+| Property | Value |
+|---|---|
+| `Job Title` | extracted title (string) |
+| `Company` | company name (string) |
+| `Source` | one of: `Indeed` / `LinkedIn` / `Direct` / `Referral` / `Other` |
+| `Location` | city + dept number (string) |
+| `Salary` | as stated, or `"Not stated"` |
+| `Priority` | `A` / `B` / `C` (omit if Skip) |
+| `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
+| `Status` | `To Assess` |
+| `date:Date Added:start` | today's date as ISO string e.g. `"2026-04-12"` |
+| `Job URL` | URL string if available |
+| `Red Flags` | JSON array string e.g. `"[\"Low salary\", \"Far location\"]"` — use values from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope` |
+| `Notes` | the "Why" paragraph from Step 7 (string) |
+| `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` |
+
+Confirm to the user once the row is written, with a link to the Notion entry.
