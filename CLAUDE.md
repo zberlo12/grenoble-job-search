@@ -92,7 +92,14 @@ Dept 01: treat as Orange/Red.
 
 ## Notion Database Schema
 
-Three databases — IDs stored in `.mcp.json` (gitignored) once configured:
+Three databases — IDs stored in `.mcp.json` (gitignored). Created 2026-04-12 under the "Job Search" page.
+
+| Database | Notion ID |
+|---|---|
+| Job Applications | `09b29be7bb764b16b173321f469b01e2` |
+| Target Companies | `108a671739474a83a1b53f1eb8d54de4` |
+| Open To-Dos | `e04c0c16b774448b86b0c309a684190b` |
+| Job Search (parent page) | `3402fc3ca02a8029a6bcead9445285aa` |
 
 **Job Applications**: Job Title (title), Company, Source (select), Location, Salary, Priority (A/B/C select), CV Approach (select), Status (select: To Assess/To Apply/Applied/Interview/Offer/Rejected/On Hold), Date Added, Date Applied, Date Response, Job URL, Gmail Thread URL, Red Flags (multi-select), Notes (rich text), English (checkbox)
 
