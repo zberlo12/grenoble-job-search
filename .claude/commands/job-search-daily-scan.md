@@ -1,6 +1,6 @@
 ---
 description: Daily Gmail job alert scan agent. Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. This runs automatically each morning — do not invoke manually unless testing.
-argument-hint: Optional date override (YYYY-MM-DD) to scan a specific day instead of yesterday
+argument-hint: Optional. `YYYY-MM-DD` for a single day, or `YYYY-MM-DD+` to catch up from that date through yesterday. Default (no arg) scans yesterday only.
 allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
 ---
 
@@ -14,10 +14,19 @@ write results to Notion, and produce a brief digest.
 
 ---
 
-## Step 1 — Determine Date Range
+## Step 1 — Determine Scan Dates
 
-Scan date: $ARGUMENTS (if provided) or yesterday's date.
-Search for emails received between 00:00 and 23:59 on that date.
+Parse `$ARGUMENTS` into a list of dates to scan:
+
+- **Empty** → scan yesterday only (single date).
+- **`YYYY-MM-DD`** (plain date) → scan that single date only.
+- **`YYYY-MM-DD+`** (date with trailing `+`) → scan every date from `YYYY-MM-DD` up to and including yesterday. This is the catch-up mode used when the cron has missed days or manual testing has paused.
+
+Today's date comes from the injected `currentDate` context — use it to compute "yesterday" and to bound the catch-up range. Never scan today itself; alert emails for today are still arriving.
+
+**Run Steps 2 through 7 once per date in the resolved list**, in chronological order. Each date gets its own Gmail/Indeed sweep, its own dedup pass against Notion, and its own dated section in the Daily Scans archive. Do not merge days into one digest — the archive stays cleaner with one section per day, and `/job-review` queue additions remain traceable to a specific day.
+
+For each scan date, search for emails received between 00:00 and 23:59 on that date.
 
 ---
 
@@ -47,6 +56,10 @@ Read the full content of each matching email thread using `gmail_read_thread`.
 ---
 
 ## Step 2b — Indeed Direct Search (Grenoble area)
+
+**Catch-up mode note:** Indeed's `search_jobs` returns current postings, not date-filtered results. In catch-up mode (multi-day scan), run Steps 2b and 2c **once total** for the whole invocation, not once per date. Attribute the Indeed results to the most recent date in the scan range for digest purposes. Gmail searches (Step 2) still iterate per date — those are the ones that matter for the day-by-day archive.
+
+
 
 Call `mcp__claude_ai_Indeed__search_jobs` with `location: "Grenoble, France"`, `country_code: "FR"`, `job_type: "fulltime"`.
 
