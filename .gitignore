@@ -19,3 +19,6 @@ Thumbs.db
 .claude/cache/
 .claude/sessions/
 .claude/history*
+
+# Application documents — personal/sensitive, not for version control
+applications/

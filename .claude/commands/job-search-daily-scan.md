@@ -213,7 +213,7 @@ Properties (SQLite format):
 | `Salary` | as stated or `"Not stated"` |
 | `Priority` | `A` / `B` / `C` (omit if Skip) |
 | `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Assess` for ranked listings, or `Needs Info` if rescue gate applied |
+| `Status` | `To Assess` for ranked listings, or `Needs Info` if rescue gate applied. (Note: `Potentially Apply` and `To Apply` are set later by `/job-review`) |
 | `date:Date Added:start` | today as ISO string e.g. `"2026-04-12"` |
 | `Job URL` | URL string if available |
 | `Gmail Thread URL` | `https://mail.google.com/mail/u/0/#all/[threadId]` if from Gmail |

@@ -225,7 +225,7 @@ Properties (SQLite format):
 | `Salary` | as stated, or `"Not stated"` |
 | `Priority` | `A` / `B` / `C` (omit if Skip) |
 | `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Assess` for ranked listings, or `Needs Info` if the rescue gate applied |
+| `Status` | `To Assess` for ranked listings, or `Needs Info` if the rescue gate applied. (Note: `Potentially Apply` and `To Apply` are set later by `/job-review`) |
 | `date:Date Added:start` | today's date as ISO string e.g. `"2026-04-12"` |
 | `Job URL` | URL string if available |
 | `Red Flags` | JSON array string e.g. `"[\"Low salary\", \"Far location\"]"` — use values from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope` |
