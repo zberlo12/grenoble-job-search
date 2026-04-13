@@ -8,6 +8,12 @@ a finished .docx to the Output CLs folder.
 Usage:
     py scripts/populate_cl.py <notion_page_id>
     py scripts/populate_cl.py <notion_page_id> "Company_JobTitle"
+    py scripts/populate_cl.py <notion_page_id> --lang fr           # French template (default)
+    py scripts/populate_cl.py <notion_page_id> --lang en           # English template
+
+Templates:
+    FR (default): cl_template.docx     (French CL layout — Raydiall base)
+    EN:           cl_template_en.docx  (English CL layout — create when first needed)
 
 The Notion page must be an Application Document page created by /job-apply.
 It expects these sections: ## Cover Letter and ## Application Notes.
@@ -24,8 +30,10 @@ from pathlib import Path
 from docx import Document
 from notion_client import Client
 
-TEMPLATE = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cl_template.docx"
-CV_TEMPLATE = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cv_template.docx"
+TEMPLATES = {
+    "fr": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cl_template.docx",
+    "en": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cl_template_en.docx",
+}
 OUTPUT_DIR = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\Output CLs"
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -150,8 +158,21 @@ def main():
         print(__doc__)
         sys.exit(1)
 
-    page_id = sys.argv[1].replace("-", "")
-    custom_name = sys.argv[2] if len(sys.argv) >= 3 else None
+    # Parse args: page_id [custom_name] [--lang fr|en]
+    args = sys.argv[1:]
+    lang = "fr"
+    if "--lang" in args:
+        idx = args.index("--lang")
+        lang = args[idx + 1].lower() if idx + 1 < len(args) else "fr"
+        args = [a for i, a in enumerate(args) if i != idx and i != idx + 1]
+
+    if lang not in TEMPLATES:
+        print(f"ERROR: Unknown language '{lang}'. Use 'fr' or 'en'.")
+        sys.exit(1)
+
+    page_id = args[0].replace("-", "")
+    custom_name = args[1] if len(args) >= 2 else None
+    template_path = TEMPLATES[lang]
 
     token = get_notion_token()
     notion = Client(auth=token)
@@ -206,12 +227,15 @@ def main():
     print(f"  Paragraphs : {len(cl_paras)}")
     print(f"  Opening    : {opening[:60]}...")
 
-    if not os.path.exists(TEMPLATE):
-        print(f"\nERROR: Template not found: {TEMPLATE}")
-        print("Run 'py scripts/make_cl_template.py' first.")
+    print(f"  Language   : {lang.upper()} -> {Path(template_path).name}")
+
+    if not os.path.exists(template_path):
+        script = "make_cl_template.py" if lang == "fr" else "make_cl_template_en.py"
+        print(f"\nERROR: Template not found: {template_path}")
+        print(f"Run 'py scripts/{script}' first.")
         sys.exit(1)
 
-    doc = Document(TEMPLATE)
+    doc = Document(template_path)
 
     replacements = {
         "{{CL_HEADLINE}}":       cl_headline,

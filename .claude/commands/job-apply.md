@@ -68,17 +68,21 @@ Call all three simultaneously:
 `notion-fetch` the Candidate Profile page (`3412fc3ca02a8132a0ccd25bbfe43fee`). Extract all populated fields — metrics, highlights, talking points.
 
 **B. Base CV Template**
-Map CV Approach to template page title:
-- `FP&A Focus` → "CV — FP&A Focus"
-- `Cost Control Focus` → "CV — Cost Control Focus"
-- `Transformation Focus` → "CV — Transformation Focus"
-- `Standard` → "CV — Standard"
+Detect JD language first: French JD → `FR`, English JD → `EN`, bilingual → `FR`.
+
+Map CV Approach + language to template page title:
+- `FP&A Focus` + FR → "CV — FP&A Focus — FR"
+- `FP&A Focus` + EN → "CV — FP&A Focus — EN"
+- `Cost Control Focus` + FR → "CV — Cost Control Focus — FR"
+- `Cost Control Focus` + EN → "CV — Cost Control Focus — EN"
+- `Transformation Focus` + FR/EN → same pattern
+- `Standard` + FR/EN → same pattern
 
 `notion-search` for that title under the CV Templates parent page (`3412fc3ca02a819e9d52fe0a393f2d23`), then `notion-fetch` the result.
 
-If the page does not exist yet:
-> "No CV template found for [CV Approach]. Paste your base CV text and I'll save it to Notion as the template for future use."
-> Create the page under CV Templates using `notion-create-pages` + `notion-update-page` to write the content. Confirm saved, then continue.
+**Fallback:** If the language-specific page is not found, search again without the language suffix (e.g. "CV — FP&A Focus"). Use that if found. If still not found:
+> "No CV template found for [CV Approach — LANG]. Paste your base CV text and I'll save it to Notion as the template for future use."
+> Create the page under CV Templates using `notion-create-pages` + `notion-update-page` to write the content. Use the language-tagged title (e.g. "CV — FP&A Focus — FR"). Confirm saved, then continue.
 
 **C. CL Examples (style reference)**
 `notion-search` for pages under the CV Templates parent that contain "CL" or "Example" in the title. Fetch up to 3. Use for tone, structure, and framing only — do not copy content.

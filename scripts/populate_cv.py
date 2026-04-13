@@ -2,17 +2,20 @@
 populate_cv.py — Fill the CV template for a specific job application.
 
 Reads the "Tailored CV" section from a Notion application document page,
-extracts the headline and profile summary, fills them into cv_template.docx,
+extracts the headline and profile summary, fills them into the CV template,
 and saves a finished .docx ready for formatting review.
 
 Usage:
     py scripts/populate_cv.py <notion_page_id>
     py scripts/populate_cv.py <notion_page_id> "Company_JobTitle"  # custom filename
+    py scripts/populate_cv.py <notion_page_id> --lang en           # English template
+    py scripts/populate_cv.py <notion_page_id> --lang fr           # French template (default)
+
+Templates:
+    FR (default): cv_template_fr.docx  (French CV layout)
+    EN:           cv_template.docx     (English CV layout)
 
 Notion token: read from .mcp.json in the repo root, or set NOTION_API_TOKEN env var.
-
-Example:
-    py scripts/populate_cv.py 3412fc3ca02a813a8315fb6fd0a2304e
 """
 
 import sys
@@ -23,7 +26,10 @@ from pathlib import Path
 from docx import Document
 from notion_client import Client
 
-TEMPLATE = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cv_template.docx"
+TEMPLATES = {
+    "fr": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cv_template_fr.docx",
+    "en": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cv_template.docx",
+}
 OUTPUT_DIR = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\Output CVs"
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -134,8 +140,21 @@ def main():
         print(__doc__)
         sys.exit(1)
 
-    page_id = sys.argv[1].replace("-", "")  # accept UUID with or without dashes
-    custom_name = sys.argv[2] if len(sys.argv) >= 3 else None
+    # Parse args: page_id [custom_name] [--lang fr|en]
+    args = sys.argv[1:]
+    lang = "fr"
+    if "--lang" in args:
+        idx = args.index("--lang")
+        lang = args[idx + 1].lower() if idx + 1 < len(args) else "fr"
+        args = [a for i, a in enumerate(args) if i != idx and i != idx + 1]
+
+    if lang not in TEMPLATES:
+        print(f"ERROR: Unknown language '{lang}'. Use 'fr' or 'en'.")
+        sys.exit(1)
+
+    page_id = args[0].replace("-", "")
+    custom_name = args[1] if len(args) >= 2 else None
+    template_path = TEMPLATES[lang]
 
     token = get_notion_token()
     notion = Client(auth=token)
@@ -170,12 +189,15 @@ def main():
     print(f"  Headline : {headline}")
     print(f"  Summary  : {summary[:80]}..." if summary and len(summary) > 80 else f"  Summary  : {summary}")
 
-    if not os.path.exists(TEMPLATE):
-        print(f"\nERROR: Template not found at:\n  {TEMPLATE}")
-        print("Run 'py scripts/make_cv_template.py' first to create it.")
+    print(f"  Language : {lang.upper()} → {Path(template_path).name}")
+
+    if not os.path.exists(template_path):
+        script = "make_cv_template_fr.py" if lang == "fr" else "make_cv_template.py"
+        print(f"\nERROR: Template not found:\n  {template_path}")
+        print(f"Run 'py scripts/{script}' first to create it.")
         sys.exit(1)
 
-    doc = Document(TEMPLATE)
+    doc = Document(template_path)
     table = doc.tables[0]
     right_cell = table.rows[0].cells[1]
 
