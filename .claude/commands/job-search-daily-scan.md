@@ -54,13 +54,23 @@ subject:(candidature OR opportunité OR poste OR recrutement OR "Finance Directo
 
 **Pre-screening before thread reads (saves tokens on known duplicates):**
 
-For each matched message, the Gmail search result already includes `subject` and `snippet` at no extra cost. Before calling `gmail_read_thread`:
+Gmail search results include `subject` and `snippet` at no extra cost. Use these to avoid reading threads for listings already in Notion. Note: alert subjects contain the *alert keyword* (e.g. "Contrôleur de Gestion"), not the actual stored job title — so do NOT use the subject keyword as part of the Notion search.
+
+For each matched message:
 
 1. Parse the snippet for a company name (e.g. `"Dolphin Semiconductor vous propose..."` → company = Dolphin Semiconductor).
-2. Parse the subject for a role keyword (e.g. `"1 nouvel emploi Contrôleur de Gestion - Grenoble (38)"` → role = Contrôleur de Gestion).
-3. If **both** are identifiable, call `mcp__claude_ai_Notion__notion-search` for `"[Company] [Role]"` with a `created_date_range` filter of the last 30 days.
-4. If a match is found → skip the thread read entirely and log as duplicate.
-5. If the company is **not** identifiable from the snippet (e.g. Cadremploi multi-listing alerts: "3 offres d'emploi trouvées") → proceed to `gmail_read_thread` as normal.
+   - If company is **not** identifiable (e.g. Cadremploi "3 offres d'emploi trouvées") → proceed to `gmail_read_thread` immediately. Cannot pre-screen.
+
+2. If company IS identifiable, check the subject for listing-count signals:
+   - **Single-listing** ("1 nouvel emploi", "vous propose une offre", "1 offre à ne rater") → this alert contains exactly one listing from this company.
+   - **Multi-listing** ("N nouvelles offres", "Nouvelles offres chez [Company]") → may contain new listings even if company is known → proceed to thread read.
+
+3. If company identifiable AND single-listing signal:
+   - Call `mcp__claude_ai_Notion__notion-search` for `"[Company]"` with `created_date_range` of last 30 days.
+   - Match found → skip `gmail_read_thread`, log as duplicate.
+   - No match → proceed to thread read (genuinely new listing).
+
+4. If multi-listing or signal ambiguous → proceed to `gmail_read_thread`.
 
 Only call `gmail_read_thread` for threads that passed pre-screening or could not be pre-screened.
 
