@@ -1,6 +1,7 @@
 ---
 description: Daily Gmail job alert scan agent. Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. This runs automatically each morning — do not invoke manually unless testing.
 argument-hint: Optional. `YYYY-MM-DD` for a single day, or `YYYY-MM-DD+` to catch up from that date through yesterday. Default (no arg) scans yesterday only.
+model-note: Schedule this cron on Claude Opus — the rescue gate vs. Skip judgment on borderline listings is a real reasoning call, and silent misclassifications won't surface in the digest.
 allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
 ---
 
