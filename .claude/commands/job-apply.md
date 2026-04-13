@@ -1,6 +1,6 @@
 ---
 description: Draft a tailored CV and cover letter for a specific job application. Fetches the Notion job row and candidate knowledge base, asks targeted questions if anything is missing, then writes tailored CV + cover letter + notes to a new Notion page linked back to the job row. Trigger with /job-apply or when Zack is ready to prepare documents for a listing.
-argument-hint: Notion row ID, job title/company search string, or blank (→ first "To Apply" row)
+argument-hint: Blank (→ list all "To Apply" rows to pick from), a number from that list, a Notion row ID, or a company/title search string
 allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages
 ---
 
@@ -28,11 +28,35 @@ Application Documents, linked back to the job row for future comparison.
 ## Step 1 — Identify the Target Row
 
 Parse `$ARGUMENTS`:
-- **Blank** → search for the first row with `Status = "To Apply"` or `Status = "Potentially Apply"`, sorted oldest Date Added first.
-- **Notion row ID** (UUID format) → fetch that page directly.
-- **Search string** → call `mcp__claude_ai_Notion__notion-search` in the Job Applications DB and use the best match.
 
-Fetch the full row. Extract: Job Title, Company, Location, Salary, CV Approach, Priority, Red Flags, Notes, Job URL.
+**Blank** → Fetch all rows with `Status = "To Apply"` from the Job Applications DB. Sort by Date Added ascending. Present a numbered selection list:
+
+```
+## To Apply Queue — pick a role to prepare documents for
+
+1. [Job Title] @ [Company] — [Location] · [Priority] · added [date]
+   [one-line summary from Notes]
+
+2. [Job Title] @ [Company] — [Location] · [Priority] · added [date]
+   [one-line summary from Notes]
+...
+
+Type a number to select, or type a job title/company name.
+```
+
+If the queue is empty, tell Zack "No roles in To Apply status — run /job-week-review to promote listings from Potentially Apply first." and stop.
+
+**Number** (e.g. `2`) → use the row at that position from the list above.
+
+**Notion row ID** (UUID format) → fetch that page directly. Confirm it has `Status = "To Apply"` — if not, warn Zack and ask to confirm before proceeding.
+
+**Search string** → `notion-search` in the Job Applications DB, filter results to `Status = "To Apply"`, use the best match.
+
+After identifying the row, fetch it fully. Extract: Job Title, Company, Location, Salary, CV Approach, Priority, Red Flags, Notes, Job URL, Docs URL.
+
+**Existing docs check:** If `Docs URL` is already set, tell Zack:
+> "Documents were already drafted for this role ([Docs URL]). Draft again and create a new version, or open the existing page?"
+> Wait for confirmation before proceeding.
 
 ---
 
