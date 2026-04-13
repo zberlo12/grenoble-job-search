@@ -1,7 +1,7 @@
 ---
 description: Daily Gmail job alert scan agent. Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. This runs automatically each morning — do not invoke manually unless testing.
 argument-hint: Optional. `YYYY-MM-DD` for a single day, or `YYYY-MM-DD+` to catch up from that date through yesterday. Default (no arg) scans yesterday only.
-model-note: Schedule this cron on Claude Opus — the rescue gate vs. Skip judgment on borderline listings is a real reasoning call, and silent misclassifications won't surface in the digest.
+model-note: Schedule this cron on Claude Sonnet (cost-efficient). The tiebreaker rule in Step 5 compensates for Sonnet's weaker judgment on borderline calls by biasing toward Needs Info rather than Skip.
 allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
 ---
 
@@ -52,7 +52,17 @@ from:@hellowork.com
 subject:(candidature OR opportunité OR poste OR recrutement OR "Finance Director" OR "Directeur Financier" OR "FP&A" OR "Contrôleur de Gestion")
 ```
 
-Read the full content of each matching email thread using `gmail_read_thread`.
+**Pre-screening before thread reads (saves tokens on known duplicates):**
+
+For each matched message, the Gmail search result already includes `subject` and `snippet` at no extra cost. Before calling `gmail_read_thread`:
+
+1. Parse the snippet for a company name (e.g. `"Dolphin Semiconductor vous propose..."` → company = Dolphin Semiconductor).
+2. Parse the subject for a role keyword (e.g. `"1 nouvel emploi Contrôleur de Gestion - Grenoble (38)"` → role = Contrôleur de Gestion).
+3. If **both** are identifiable, call `mcp__claude_ai_Notion__notion-search` for `"[Company] [Role]"` with a `created_date_range` filter of the last 30 days.
+4. If a match is found → skip the thread read entirely and log as duplicate.
+5. If the company is **not** identifiable from the snippet (e.g. Cadremploi multi-listing alerts: "3 offres d'emploi trouvées") → proceed to `gmail_read_thread` as normal.
+
+Only call `gmail_read_thread` for threads that passed pre-screening or could not be pre-screened.
 
 ---
 
@@ -84,7 +94,13 @@ Run these 3 grouped searches:
 2. `"Finance Business Partner OR Head of Finance OR VP Finance OR Finance Transformation"`
 3. `"P2P Manager OR Responsable P2P OR Procurement Manager OR Finance Governance OR Responsable Procure-to-Pay"`
 
-Add all results from Steps 2b and 2c to the pool for deduplication in Step 4.
+**Early dedup for Indeed direct results:** Indeed `search_jobs` already returns company, title, URL, and job ID — no thread read required. Before adding results to the pool, run a quick dedup pass for each listing:
+- If `Job URL` or job ID (`jk=` parameter) matches a Notion entry created in the last 30 days → discard immediately.
+- If no URL match, search Notion for `"[Company] [Job Title]"` within the last 30 days → discard if found.
+
+Only listings that survive this early pass enter the Step 4 dedup pool.
+
+Add all surviving results from Steps 2b and 2c to the pool for deduplication in Step 4.
 
 **Note on remote results:** For Step 2c listings, the location zone assessment in Step 5 should default to 🌐 Remote — assess on role fit alone, not commute.
 
@@ -108,9 +124,12 @@ For each listing, extract:
 
 Database ID: `09b29be7bb764b16b173321f469b01e2`
 
-For each extracted listing, call `mcp__claude_ai_Notion__notion-search`:
-- If a Job URL exists, search for it — if any result's URL matches, skip this listing
-- If no URL, search `[Company] [Job Title]` — if a match is found, skip
+For each extracted listing that was not already discarded by early dedup (Steps 2b/2c) or Gmail pre-screening (Step 2), call `mcp__claude_ai_Notion__notion-search` with a **30-day `created_date_range` filter** (start: today minus 30 days):
+
+- If a Job URL exists, search for it — if any result's URL or `jk=` job ID matches, skip this listing.
+- If no URL, search `"[Company] [Job Title]"` — if a match is found within the last 30 days, skip.
+
+The 30-day window is safe: same company posting a *different* role within 30 days will not be caught because the search includes the job title. Only the exact same company+title combination within 30 days is treated as a duplicate.
 
 Only process listings that are not already in Notion.
 
@@ -134,6 +153,8 @@ If ALL of the following are true:
 - `Notes` — start with `"QUEUED:"` followed by a one-line summary of what is needed
 
 Only if the listing has enough information to rank it does Step 5 proceed to the standard A/B/C/Skip assignment below.
+
+**Tiebreaker rule:** When it is genuinely unclear whether a listing clears the rescue gate, always route to `Needs Info`. The cost of a false-negative (missed application) is higher than the cost of a false-positive (30 seconds in `/job-review`). Only assign Skip or C when a disqualifier is unambiguous — not just probable.
 
 ---
 
