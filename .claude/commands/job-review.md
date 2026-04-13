@@ -1,7 +1,7 @@
 ---
-description: Drain the "Needs Info" queue in the Job Applications Notion database. Walks through each queued listing, auto-fetches the full job description where possible (Indeed, Gmail thread), otherwise asks the user to paste it, then re-ranks the listing using the /job-search criteria and updates the Notion row. Trigger with /job-review.
+description: Drain the "Needs Info" queue in the Job Applications Notion database. Walks through each queued listing, auto-fetches the full job description where possible (Indeed MCP, Gmail thread re-read, or generic WebFetch for non-LinkedIn URLs), otherwise asks the user to paste it, then re-ranks the listing using the /job-search criteria and updates the Notion row. Trigger with /job-review.
 argument-hint: Optional — pass a row count limit (e.g. "5") to process only the N oldest queued listings
-allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__gmail_read_thread
+allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__gmail_read_thread, WebFetch
 ---
 
 # Job Review Queue Drainer
@@ -43,14 +43,35 @@ QUEUED note: [first line of Notes after "QUEUED:"]
 🔗 [Job URL if available]
 ```
 
-Then try to auto-enrich:
+Then try to auto-enrich using the following ladder. Stop as soon as any rung returns a usable JD with the fields needed to clear `Missing Info`.
 
-1. **If `Job URL` is an Indeed URL** — call `mcp__claude_ai_Indeed__get_job_details` with the URL.
-   Use the returned salary, description, and company details.
-2. **If `Gmail Thread URL` is set** — extract the thread ID from the URL (last segment after `#all/`)
-   and call `mcp__claude_ai_Gmail__gmail_read_thread` to re-read the original alert thread.
-3. **If neither auto-source works** — ask Zack:
-   > "No auto-source available for this one. Paste the full job description, or type `skip` to leave it queued, or `dismiss` to move it to Dismissed."
+**Context-hygiene rule (applies to every rung):** If a fetched page exceeds ~8K characters, extract only the structured fields (salary, location, hybrid/remote, scope, language, contract type, seniority) and discard the rest. Do NOT preserve full JD text in conversation context — the goal is to enrich the Notion row, not to archive the listing.
+
+**Rung 1 — Indeed URL**
+If `Job URL` matches `*indeed.com/*` or `to.indeed.com/*` (shortlink), call `mcp__claude_ai_Indeed__get_job_details` with the URL. Use the returned salary, description, and company details.
+
+**Rung 2 — Gmail thread re-read**
+If `Gmail Thread URL` is set, extract the thread ID (last segment after `#all/`) and call `mcp__claude_ai_Gmail__gmail_read_thread`. Note: the daily scan already read this thread once, so rung 2 rarely adds new data on its own — only trust it if the thread body contains more than a one-line alert snippet.
+
+**Rung 3 — LinkedIn short-circuit**
+If `Job URL` is a `linkedin.com/*` URL, do NOT call WebFetch — LinkedIn reliably returns a login wall, so attempting it just burns a tool call. Go directly to Rung 5 and tell Zack:
+> "This is a LinkedIn listing — LinkedIn blocks automated fetches. Paste the JD, type `skip` to leave it queued, or `dismiss` to move it to Dismissed."
+
+**Rung 4 — WebFetch (non-LinkedIn URLs)**
+If `Job URL` exists, is not a LinkedIn URL, and rungs 1–2 did not yield enough data, call `WebFetch` on the URL with this prompt:
+> "Extract the full job description, salary, contract type, location, hybrid/remote policy, required seniority/experience level, and any language requirements. Return as structured fields only — no preserved full-text JD."
+
+Expected behaviour by source:
+- **Welcome to the Jungle** (`welcometothejungle.com/*`) — usually fetches cleanly.
+- **APEC, Cadremploi, HelloWork** — usually fetchable.
+- **Michael Page / Robert Half** — hit-and-miss (JS-rendered pages return empty).
+- **Direct company career pages** — hit-and-miss; worth trying once.
+
+Do NOT retry WebFetch on the same URL if the first call returns blocked, truncated, or empty content. Fall through to Rung 5.
+
+**Rung 5 — Manual paste fallback**
+If all previous rungs failed (or LinkedIn short-circuit triggered), ask Zack:
+> "Auto-enrichment failed for this one (tried: [list of rungs attempted, or `LinkedIn — blocked`]). Paste the full job description, or type `skip` to leave it queued, or `dismiss` to move it to Dismissed."
 
 ---
 
