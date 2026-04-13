@@ -171,25 +171,30 @@ def import_directory(notion, directory, doc_type, parent_id, dry_run=False):
         print(f"  Creating: {title} ...", end=" ", flush=True)
         try:
             text = extract_docx_text(str(filepath))
-            # Truncate if very long (Notion block limit)
-            if len(text) > 90000:
-                text = text[:90000] + "\n\n[truncated — see original Word file]"
+
+            # Split text into <=2000 char chunks for Notion's block limit
+            chunk_size = 1900
+            chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+            # Cap at 50 blocks to stay well under Notion page limits
+            chunks = chunks[:50]
+
+            children = [{
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": chunk}}]
+                }
+            } for chunk in chunks]
 
             notion.pages.create(
                 parent={"page_id": parent_id},
                 properties={"title": [{"text": {"content": title}}]},
-                children=[{
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {
-                        "rich_text": [{"type": "text", "text": {"content": text}}]
-                    }
-                }]
+                children=children
             )
             print("done")
             created += 1
         except Exception as e:
-            print(f"ERROR: {e}")
+            print(f"ERROR: {str(e)[:120]}")
 
     print(f"  Result: {created} created, {skipped} skipped")
     return created
@@ -205,10 +210,10 @@ def main():
         token = get_notion_token()
         notion = Client(auth=token)
 
-    print(f"=== CVs → CV Templates ===")
+    print("=== CVs -> CV Templates ===")
     import_directory(notion, CV_DIR, "cv", CV_TEMPLATES_PARENT, dry_run)
 
-    print(f"\n=== CLs → CL Examples ===")
+    print("\n=== CLs -> CL Examples ===")
     import_directory(notion, CL_DIR, "cl", CL_EXAMPLES_PARENT, dry_run)
 
     if not dry_run:
