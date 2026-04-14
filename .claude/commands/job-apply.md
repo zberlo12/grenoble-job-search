@@ -201,8 +201,17 @@ Documents drafted for [Job Title] @ [Company]:
 
 Next steps:
 1. Open the Notion page — review CV headline and summary first.
-2. Copy CV into your Word template and adjust formatting.
+2. Run the Word populate scripts (use the approach matching the CV Approach + JD language):
+   py scripts/populate_cv.py <page_id> --approach [fpa-fr | costcontrol-fr | raf-fr | fpa-en | hof-en]
+   py scripts/populate_cl.py <page_id> [--lang en]
 3. Review the cover letter opener — verify the company-specific detail is accurate.
 4. Check Application Notes for anything to verify before submitting.
 5. When submitted, update the Notion row Status to "Applied" and set Date Applied.
+
+CV Approach → Word template mapping:
+- FP&A Focus + FR  → --approach fpa-fr
+- FP&A Focus + EN  → --approach fpa-en
+- Cost Control + FR → --approach costcontrol-fr
+- Standard/RAF + FR → --approach raf-fr
+- Transformation/Director + EN → --approach hof-en
 ```

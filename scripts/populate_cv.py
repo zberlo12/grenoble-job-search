@@ -7,13 +7,19 @@ and saves a finished .docx ready for formatting review.
 
 Usage:
     py scripts/populate_cv.py <notion_page_id>
-    py scripts/populate_cv.py <notion_page_id> "Company_JobTitle"  # custom filename
-    py scripts/populate_cv.py <notion_page_id> --lang en           # English template
-    py scripts/populate_cv.py <notion_page_id> --lang fr           # French template (default)
+    py scripts/populate_cv.py <notion_page_id> "Company_JobTitle"
+    py scripts/populate_cv.py <notion_page_id> --approach fpa-fr        (default)
+    py scripts/populate_cv.py <notion_page_id> --approach costcontrol-fr
+    py scripts/populate_cv.py <notion_page_id> --approach raf-fr
+    py scripts/populate_cv.py <notion_page_id> --approach fpa-en
+    py scripts/populate_cv.py <notion_page_id> --approach hof-en
 
-Templates:
-    FR (default): cv_template_fr.docx  (French CV layout)
-    EN:           cv_template.docx     (English CV layout)
+Approach -> template mapping:
+    fpa-fr         CV — FP&A Focus — FR     (Hays CDG/FPA base)
+    costcontrol-fr CV — Cost Control — FR   (Teledyne CDG base)
+    raf-fr         CV — Standard — FR       (Raydiall RAF base — callback-proven)
+    fpa-en         CV — FP&A Focus — EN     (ThermoFisher Sr Mgr base)
+    hof-en         CV — Head of Finance EN  (ESRF HoF base — Director-level EN)
 
 Notion token: read from .mcp.json in the repo root, or set NOTION_API_TOKEN env var.
 """
@@ -26,9 +32,17 @@ from pathlib import Path
 from docx import Document
 from notion_client import Client
 
+BASE = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT"
+
 TEMPLATES = {
-    "fr": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cv_template_fr.docx",
-    "en": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cv_template.docx",
+    "fpa-fr":         BASE + r"\cv_template_fpa_fr.docx",
+    "costcontrol-fr": BASE + r"\cv_template_costcontrol_fr.docx",
+    "raf-fr":         BASE + r"\cv_template_raf_fr.docx",
+    "fpa-en":         BASE + r"\cv_template_fpa_en.docx",
+    "hof-en":         BASE + r"\cv_template_hof_en.docx",
+    # legacy aliases
+    "fr":             BASE + r"\cv_template_fpa_fr.docx",
+    "en":             BASE + r"\cv_template_fpa_en.docx",
 }
 OUTPUT_DIR = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\Output CVs"
 
@@ -140,21 +154,24 @@ def main():
         print(__doc__)
         sys.exit(1)
 
-    # Parse args: page_id [custom_name] [--lang fr|en]
+    # Parse args: page_id [custom_name] [--approach <key>]
     args = sys.argv[1:]
-    lang = "fr"
-    if "--lang" in args:
-        idx = args.index("--lang")
-        lang = args[idx + 1].lower() if idx + 1 < len(args) else "fr"
-        args = [a for i, a in enumerate(args) if i != idx and i != idx + 1]
+    approach = "fpa-fr"
+    for flag in ("--approach", "--lang"):
+        if flag in args:
+            idx = args.index(flag)
+            approach = args[idx + 1].lower() if idx + 1 < len(args) else "fpa-fr"
+            args = [a for i, a in enumerate(args) if i != idx and i != idx + 1]
+            break
 
-    if lang not in TEMPLATES:
-        print(f"ERROR: Unknown language '{lang}'. Use 'fr' or 'en'.")
+    if approach not in TEMPLATES:
+        valid = ", ".join(k for k in TEMPLATES if "-" in k)
+        print(f"ERROR: Unknown approach '{approach}'. Valid: {valid}")
         sys.exit(1)
 
     page_id = args[0].replace("-", "")
     custom_name = args[1] if len(args) >= 2 else None
-    template_path = TEMPLATES[lang]
+    template_path = TEMPLATES[approach]
 
     token = get_notion_token()
     notion = Client(auth=token)
@@ -189,10 +206,10 @@ def main():
     print(f"  Headline : {headline}")
     print(f"  Summary  : {summary[:80]}..." if summary and len(summary) > 80 else f"  Summary  : {summary}")
 
-    print(f"  Language : {lang.upper()} → {Path(template_path).name}")
+    print(f"  Approach : {approach} -> {Path(template_path).name}")
 
     if not os.path.exists(template_path):
-        script = "make_cv_template_fr.py" if lang == "fr" else "make_cv_template.py"
+        script = "make_cv_template.py"
         print(f"\nERROR: Template not found:\n  {template_path}")
         print(f"Run 'py scripts/{script}' first to create it.")
         sys.exit(1)
