@@ -1,6 +1,6 @@
 ---
 description: Daily Gmail job alert scan agent (Gmail-only). Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. For Indeed direct searches use /job-search-indeed-local or /job-search-indeed-remote. This runs automatically each morning — do not invoke manually unless testing.
-argument-hint: Optional. `YYYY-MM-DD` for a single day, or `YYYY-MM-DD+` to catch up from that date through yesterday. Default (no arg) scans yesterday only.
+argument-hint: Optional. `MM/DD/YY` for a single day, or `MM/DD/YY+` to catch up from that date through yesterday. Default (no arg) scans yesterday only.
 model-note: Schedule this cron on Claude Sonnet (cost-efficient). The tiebreaker rule in Step 5 compensates for Sonnet's weaker judgment on borderline calls by biasing toward Needs Info rather than Skip.
 allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
 ---
@@ -17,11 +17,11 @@ write results to Notion, and produce a brief digest.
 
 ## Step 1 — Determine Scan Dates
 
-Parse `$ARGUMENTS` into a list of dates to scan:
+Parse `$ARGUMENTS` into a list of dates to scan. Accepted format is `MM/DD/YY` (e.g. `04/12/26`):
 
 - **Empty** → scan yesterday only (single date).
-- **`YYYY-MM-DD`** (plain date) → scan that single date only.
-- **`YYYY-MM-DD+`** (date with trailing `+`) → scan every date from `YYYY-MM-DD` up to and including yesterday. This is the catch-up mode used when the cron has missed days or manual testing has paused.
+- **`MM/DD/YY`** (plain date) → scan that single date only.
+- **`MM/DD/YY+`** (date with trailing `+`) → scan every date from that date up to and including yesterday. This is the catch-up mode used when the cron has missed days or manual testing has paused.
 
 Today's date comes from the injected `currentDate` context — use it to compute "yesterday" and to bound the catch-up range. Never scan today itself; alert emails for today are still arriving.
 
