@@ -1,8 +1,8 @@
 ---
-description: Daily Gmail job alert scan agent. Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. This runs automatically each morning — do not invoke manually unless testing.
+description: Daily Gmail job alert scan agent (Gmail-only). Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. For Indeed direct searches use /job-search-indeed-local or /job-search-indeed-remote. This runs automatically each morning — do not invoke manually unless testing.
 argument-hint: Optional. `YYYY-MM-DD` for a single day, or `YYYY-MM-DD+` to catch up from that date through yesterday. Default (no arg) scans yesterday only.
 model-note: Schedule this cron on Claude Sonnet (cost-efficient). The tiebreaker rule in Step 5 compensates for Sonnet's weaker judgment on borderline calls by biasing toward Needs Info rather than Skip.
-allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
+allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
 ---
 
 # Daily Job Alert Scan Agent
@@ -33,24 +33,19 @@ For each scan date, search for emails received between 00:00 and 23:59 on that d
 
 ## Step 2 — Search Gmail for Job Alerts
 
-Run Gmail searches for each of the following. Use `gmail_search_messages` with `after:` and `before:` date filters.
+Run two Gmail searches using `gmail_search_messages` with `after:` and `before:` date filters (format: `YYYY/MM/DD`).
 
-**Alert sources to search:**
+**Search 1 — All job alert emails (label-based):**
 ```
-from:jobalerts@linkedin.com
-from:@indeed.com OR from:@fr.indeed.com
-from:@welcometothejungle.com
-from:@apec.fr
-from:@cadremploi.fr
-from:@michaelpage.fr OR from:@michaelpage.com
-from:@roberthalf.fr OR from:@roberthalf.com
-from:@hellowork.com
+label:jobs after:YYYY/MM/DD before:YYYY/MM/DD
 ```
+All job alert emails (LinkedIn, Indeed, APEC, WTTJ, Cadremploi, Michael Page, Robert Half, HelloWork, etc.) arrive pre-labelled "jobs" in Gmail. This single search replaces individual per-source queries.
 
-**Recruiter/direct outreach (supplement):**
+**Search 2 — Recruiter/direct outreach (not labelled):**
 ```
-subject:(candidature OR opportunité OR poste OR recrutement OR "Finance Director" OR "Directeur Financier" OR "FP&A" OR "Contrôleur de Gestion")
+-label:jobs subject:(candidature OR opportunité OR poste OR recrutement OR "Finance Director" OR "Directeur Financier" OR "FP&A" OR "Contrôleur de Gestion") after:YYYY/MM/DD before:YYYY/MM/DD
 ```
+The `-label:jobs` exclusion prevents double-counting threads already caught by Search 1.
 
 **Pre-screening before thread reads (saves tokens on known duplicates):**
 
@@ -76,46 +71,6 @@ Only call `gmail_read_thread` for threads that passed pre-screening or could not
 
 ---
 
-## Step 2b — Indeed Direct Search (Grenoble area)
-
-**Catch-up mode note:** Indeed's `search_jobs` returns current postings, not date-filtered results. In catch-up mode (multi-day scan), run Steps 2b and 2c **once total** for the whole invocation, not once per date. Attribute the Indeed results to the most recent date in the scan range for digest purposes. Gmail searches (Step 2) still iterate per date — those are the ones that matter for the day-by-day archive.
-
-
-
-Call `mcp__claude_ai_Indeed__search_jobs` with `location: "Grenoble, France"`, `country_code: "FR"`, `job_type: "fulltime"`.
-
-Run these 5 grouped searches (OR syntax combines titles into one API call):
-
-1. `"Contrôleur de Gestion OR Financial Controller OR FP&A Manager OR Finance Business Partner OR Responsable Contrôle de Gestion"`
-2. `"Responsable Administratif Financier OR RAF OR Directeur Financier OR Finance Manager OR Accounting Manager"`
-3. `"Cost Controller OR Contrôleur de Gestion Industriel OR Responsable Comptabilité OR Chef Comptable"`
-4. `"Responsable P2P OR Responsable Procure-to-Pay OR P2P Manager OR Procurement Manager OR Responsable Achats OR Acheteur Senior"`
-5. `"Demand Planner OR Supply Chain Planner OR Responsable Supply Chain OR Supply Chain Manager OR Senior Buyer"`
-
----
-
-## Step 2c — Indeed Direct Search (Remote / France-wide)
-
-Call `mcp__claude_ai_Indeed__search_jobs` with `location: "remote"`, `country_code: "FR"`, `job_type: "fulltime"`.
-
-Run these 3 grouped searches:
-
-1. `"Finance Director OR Directeur Financier OR Financial Controller OR FP&A Manager OR Finance Manager"`
-2. `"Finance Business Partner OR Head of Finance OR VP Finance OR Finance Transformation"`
-3. `"P2P Manager OR Responsable P2P OR Procurement Manager OR Finance Governance OR Responsable Procure-to-Pay"`
-
-**Early dedup for Indeed direct results:** Indeed `search_jobs` already returns company, title, URL, and job ID — no thread read required. Before adding results to the pool, run a quick dedup pass for each listing:
-- If `Job URL` or job ID (`jk=` parameter) matches a Notion entry created in the last 30 days → discard immediately.
-- If no URL match, search Notion for `"[Company] [Job Title]"` within the last 30 days → discard if found.
-
-Only listings that survive this early pass enter the Step 4 dedup pool.
-
-Add all surviving results from Steps 2b and 2c to the pool for deduplication in Step 4.
-
-**Note on remote results:** For Step 2c listings, the location zone assessment in Step 5 should default to 🌐 Remote — assess on role fit alone, not commute.
-
----
-
 ## Step 3 — Extract Individual Job Listings
 
 From each email, extract every distinct job listing. Job alert emails often contain multiple listings.
@@ -134,7 +89,7 @@ For each listing, extract:
 
 Database ID: `09b29be7bb764b16b173321f469b01e2`
 
-For each extracted listing that was not already discarded by early dedup (Steps 2b/2c) or Gmail pre-screening (Step 2), call `mcp__claude_ai_Notion__notion-search` with a **30-day `created_date_range` filter** (start: today minus 30 days):
+For each extracted listing that was not already discarded by Gmail pre-screening (Step 2), call `mcp__claude_ai_Notion__notion-search` with a **30-day `created_date_range` filter** (start: today minus 30 days):
 
 - If a Job URL exists, search for it — if any result's URL or `jk=` job ID matches, skip this listing.
 - If no URL, search `"[Company] [Job Title]"` — if a match is found within the last 30 days, skip.
@@ -245,7 +200,7 @@ Call `mcp__claude_ai_Notion__notion-update-page` with `command: "insert_content_
 - ⛔ Skip: [N]
 
 ### Sources
-[Breakdown: LinkedIn N, Indeed Grenoble N, Indeed Remote N, APEC N, WTTJ N, etc.]
+[Breakdown: LinkedIn N, Indeed email N, APEC N, WTTJ N, Cadremploi N, Direct/recruiter N, etc.]
 
 ### Needs Info Queue (added today)
 - [Title] @ [Company] — missing: [Salary, Hybrid policy, ...]
