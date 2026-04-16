@@ -1,5 +1,5 @@
 ---
-description: End-of-week comparison of all "Potentially Apply" listings. Fetches the holding queue, presents a ranked comparison table, and lets Zack select which listings to commit to (→ To Apply) vs. dismiss. Trigger with /job-week-review.
+description: End-of-week comparison of all "Potentially Apply" listings. Fetches the holding queue, presents a ranked comparison table, and lets Zack select which listings to commit to (→ To Apply) vs. dismiss. Trigger with /job-review-weekly.
 argument-hint: No arguments needed.
 allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page
 ---
