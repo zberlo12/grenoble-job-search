@@ -196,7 +196,8 @@ Then call `notion-update-page` to write the full content with three sections.
 - [e.g. "Salary not confirmed — raise at offer stage, not before"]
 
 ### Before submitting
-- [e.g. "Confirm hybrid policy", "Find hiring manager name on LinkedIn"]
+- [ ] Verify company address in CL header — script uses city + dept + France (e.g. "Saint-Égrève (38), France"). If you need the full street address, update the Word file manually before sending.
+- [ ] [other checks — hybrid policy, hiring manager name, etc.]
 ```
 
 ---

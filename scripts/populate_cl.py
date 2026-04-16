@@ -209,6 +209,9 @@ def main():
     # Extract Application Notes for addressee/location/title
     notes_lines = extract_section(blocks, "Application Notes")
     company, job_title, location = parse_application_notes(notes_lines)
+    # Ensure location always includes ", France" for the CL header
+    if location and not location.lower().endswith("france"):
+        location = location.rstrip(", ") + ", France"
 
     # Extract CV headline from Tailored CV section (reuse for CL header)
     cv_lines = extract_section(blocks, "Tailored CV")
