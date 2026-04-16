@@ -1,6 +1,6 @@
 ---
 description: Daily Gmail job alert scan agent (Gmail-only). Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. For Indeed direct searches use /job-search-indeed-local or /job-search-indeed-remote. This runs automatically each morning — do not invoke manually unless testing.
-argument-hint: Optional. `MM/DD/YY` for a single day, or `MM/DD/YY+` to catch up from that date through yesterday. Default (no arg) scans yesterday only.
+argument-hint: Optional. `MM/DD/YY` for a single day, `MM/DD/YY+` to catch up from that date through yesterday, or append `@source` to filter to one sender e.g. `03/26/26+ @linkedin` or `04/14/26 @cadremploi`. Default (no arg) scans yesterday, all sources.
 model-note: Schedule this cron on Claude Sonnet (cost-efficient). The tiebreaker rule in Step 5 compensates for Sonnet's weaker judgment on borderline calls by biasing toward Needs Info rather than Skip.
 allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
 ---
@@ -17,11 +17,28 @@ write results to Notion, and produce a brief digest.
 
 ## Step 1 — Determine Scan Dates
 
-Parse `$ARGUMENTS` into a list of dates to scan. Accepted format is `MM/DD/YY` (e.g. `04/12/26`):
+Parse `$ARGUMENTS` into a date range and optional source filter.
 
-- **Empty** → scan yesterday only (single date).
-- **`MM/DD/YY`** (plain date) → scan that single date only.
-- **`MM/DD/YY+`** (date with trailing `+`) → scan every date from that date up to and including yesterday. This is the catch-up mode used when the cron has missed days or manual testing has paused.
+**Date formats** (`MM/DD/YY`, e.g. `04/12/26`):
+- **Empty** → scan yesterday only.
+- **`MM/DD/YY`** → scan that single date only.
+- **`MM/DD/YY+`** → scan from that date through yesterday (catch-up mode).
+
+**Optional source filter** — append `@keyword` after the date to restrict Gmail searches to a single sender:
+- `03/26/26+ @apec` → only `from:offres@diffusion.apec.fr`
+- `04/14/26 @linkedin` → only `from:linkedin.com`
+- `04/14/26 @cadremploi` → only `from:alertes.cadremploi.fr`
+- `04/14/26 @indeed` → only `from:jobalert.indeed.com`
+
+When a source filter is active, skip the other Gmail searches entirely for that run.
+
+**Known source map:**
+| Keyword | Gmail filter |
+|---|---|
+| `@apec` | `from:offres@diffusion.apec.fr` |
+| `@linkedin` | `from:linkedin.com` |
+| `@cadremploi` | `from:alertes.cadremploi.fr` |
+| `@indeed` | `from:jobalert.indeed.com` |
 
 Today's date comes from the injected `currentDate` context — use it to compute "yesterday" and to bound the catch-up range. Never scan today itself; alert emails for today are still arriving.
 
@@ -41,12 +58,13 @@ label:jobs after:YYYY/MM/DD before:YYYY/MM/DD
 ```
 Most job alert emails (LinkedIn, Indeed, Cadremploi, Michael Page, Robert Half, HelloWork, WTTJ, etc.) arrive pre-labelled "jobs" in Gmail. This single search replaces individual per-source queries.
 
-**Search 2 — APEC alerts (not labelled "jobs"):**
+**Search 2 — APEC alerts:**
 ```
 from:offres@diffusion.apec.fr after:YYYY/MM/DD before:YYYY/MM/DD
 ```
-APEC emails are NOT auto-labelled "jobs" in Gmail and would be missed by Search 1. They arrive daily from `offres@diffusion.apec.fr` with subjects like "17 offres Apec du 14/04/2026". The snippet includes "N offres correspondent à votre recherche" — read the thread to extract the matching listings.
-> **Fix pending**: Ask Zack to add a Gmail filter: `From: offres@diffusion.apec.fr` → apply label `jobs`. Once done, APEC will be caught by Search 1 and this separate search can be removed.
+APEC emails arrive daily from `offres@diffusion.apec.fr` and are now labelled "jobs" (Gmail filter in place). They are also caught by Search 1, so this search is redundant — but kept as an explicit safety net.
+
+> **APEC content limitation**: APEC emails are HTML-only with no plain-text fallback. `get_thread` returns no body content. Do NOT attempt to call `get_thread` on APEC threads — it will return nothing useful. Instead, when an APEC thread is found: read the subject line for the total count (e.g. "17 offres Apec du 14/04/2026") and the snippet for the matching count ("N offres correspondent à votre recherche"), log both in the daily digest under a **"APEC — manual check required"** section, and skip to the next thread. The actual listings must be checked by logging into apec.fr directly.
 
 **Search 3 — Recruiter/direct outreach (not labelled):**
 ```
