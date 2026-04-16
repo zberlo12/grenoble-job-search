@@ -1,7 +1,7 @@
 ---
 description: Draft a tailored CV and cover letter for a specific job application. Fetches the Notion job row and candidate knowledge base, asks targeted questions if anything is missing, then writes tailored CV + cover letter + notes to a new Notion page linked back to the job row. Trigger with /job-apply or when Zack is ready to prepare documents for a listing.
 argument-hint: Blank (→ list all "To Apply" rows to pick from), a number from that list, a Notion row ID, or a company/title search string
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages
+allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, Bash
 ---
 
 # Job Apply — Document Drafter
@@ -147,12 +147,14 @@ Call `notion-create-pages` under the Application Documents parent (`3412fc3ca02a
 Title: [Company] — [Job Title] — [YYYY-MM-DD]
 ```
 
-Then call `notion-update-page` to write the full content with three sections:
+Then call `notion-update-page` to write the full content with three sections.
+
+**IMPORTANT: Always use these exact English heading names — the Word populate scripts look for them by name:**
 
 ```markdown
 ## Tailored CV
 
-[full tailored CV]
+[full tailored CV — content may be in French or English matching the JD]
 
 ---
 
@@ -192,7 +194,36 @@ Do not change Status — Zack controls when to move to `Applied`.
 
 ---
 
-## Step 8 — Output Summary
+## Step 8 — Run Word Populate Scripts
+
+Immediately after Step 7, run both scripts via Bash from the repo root
+(`C:\Users\zberl\OneDrive\Documents\Code\Grenoble-job-search`).
+
+**Map CV Approach + language to `--approach` flag:**
+
+| CV Approach | Language | --approach flag |
+|---|---|---|
+| FP&A Focus | FR | `fpa-fr` |
+| FP&A Focus | EN | `fpa-en` |
+| Cost Control Focus | FR | `costcontrol-fr` |
+| Standard / RAF | FR | `raf-fr` |
+| Transformation Focus | EN | `hof-en` |
+
+Run both commands sequentially:
+
+```bash
+cd "C:\Users\zberl\OneDrive\Documents\Code\Grenoble-job-search"
+py scripts/populate_cv.py [PAGE_ID] --approach [FLAG]
+py scripts/populate_cl.py [PAGE_ID]
+```
+
+Replace `[PAGE_ID]` with the Notion page ID from Step 6 and `[FLAG]` with the mapped approach above.
+
+If either script fails, report the error message and stop — do not proceed to Step 9.
+
+---
+
+## Step 9 — Output Summary
 
 ```
 Documents drafted for [Job Title] @ [Company]:
@@ -200,19 +231,12 @@ Documents drafted for [Job Title] @ [Company]:
 📄 Notion page: [Application Documents URL]
    └── Tailored CV / Cover Letter / Application Notes
 
-Next steps:
-1. Open the Notion page — review CV headline and summary first.
-2. Run the Word populate scripts (use the approach matching the CV Approach + JD language):
-   py scripts/populate_cv.py <page_id> --approach [fpa-fr | costcontrol-fr | raf-fr | fpa-en | hof-en]
-   py scripts/populate_cl.py <page_id> [--lang en]
-3. Review the cover letter opener — verify the company-specific detail is accurate.
-4. Check Application Notes for anything to verify before submitting.
-5. When submitted, update the Notion row Status to "Applied" and set Date Applied.
+📝 Word files generated:
+   └── [CV output filename from script]
+   └── [CL output filename from script]
 
-CV Approach → Word template mapping:
-- FP&A Focus + FR  → --approach fpa-fr
-- FP&A Focus + EN  → --approach fpa-en
-- Cost Control + FR → --approach costcontrol-fr
-- Standard/RAF + FR → --approach raf-fr
-- Transformation/Director + EN → --approach hof-en
+Next steps:
+1. Open the Word files — review CV headline and LM opener first.
+2. Review the Application Notes in Notion for anything to verify before submitting.
+3. When submitted, update the Notion row Status to "Applied" and set Date Applied.
 ```

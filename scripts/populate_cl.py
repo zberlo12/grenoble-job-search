@@ -252,7 +252,7 @@ def main():
 
     for placeholder, value in replacements.items():
         ok = replace_placeholder(doc, placeholder, value)
-        status = "✓" if ok else "✗ NOT FOUND"
+        status = "[OK]" if ok else "[NOT FOUND]"
         print(f"  {placeholder}: {status}")
 
     # Output filename
