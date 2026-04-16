@@ -34,8 +34,13 @@ Three components:
 
 ```
 .claude/commands/
-  job-search.md            # /job-search skill — interactive analyser
-  job-search-daily-scan.md # daily Gmail agent prompt
+  job-search.md               # /job-search skill — interactive analyser
+  job-search-daily-scan.md    # daily Gmail agent prompt (runs automatically each morning)
+  job-search-indeed.md        # manual Indeed sweep — local, remote, or both
+  job-search-target-companies.md  # checks Target Companies careers pages for open roles
+  job-review.md               # drains the Needs Info queue
+  job-apply.md                # drafts tailored CV + CL for a specific application
+  job-week-review.md          # end-of-week ranking of Potentially Apply listings
 .mcp.json.template         # Notion MCP config template (copy → .mcp.json, fill token)
 .gitignore                 # excludes .mcp.json (has secrets), node_modules, OS files
 ```

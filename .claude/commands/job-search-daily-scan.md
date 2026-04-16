@@ -39,13 +39,20 @@ Run two Gmail searches using `gmail_search_messages` with `after:` and `before:`
 ```
 label:jobs after:YYYY/MM/DD before:YYYY/MM/DD
 ```
-All job alert emails (LinkedIn, Indeed, APEC, WTTJ, Cadremploi, Michael Page, Robert Half, HelloWork, etc.) arrive pre-labelled "jobs" in Gmail. This single search replaces individual per-source queries.
+Most job alert emails (LinkedIn, Indeed, Cadremploi, Michael Page, Robert Half, HelloWork, WTTJ, etc.) arrive pre-labelled "jobs" in Gmail. This single search replaces individual per-source queries.
 
-**Search 2 — Recruiter/direct outreach (not labelled):**
+**Search 2 — APEC alerts (not labelled "jobs"):**
 ```
--label:jobs subject:(candidature OR opportunité OR poste OR recrutement OR "Finance Director" OR "Directeur Financier" OR "FP&A" OR "Contrôleur de Gestion") after:YYYY/MM/DD before:YYYY/MM/DD
+from:offres@diffusion.apec.fr after:YYYY/MM/DD before:YYYY/MM/DD
 ```
-The `-label:jobs` exclusion prevents double-counting threads already caught by Search 1.
+APEC emails are NOT auto-labelled "jobs" in Gmail and would be missed by Search 1. They arrive daily from `offres@diffusion.apec.fr` with subjects like "17 offres Apec du 14/04/2026". The snippet includes "N offres correspondent à votre recherche" — read the thread to extract the matching listings.
+> **Fix pending**: Ask Zack to add a Gmail filter: `From: offres@diffusion.apec.fr` → apply label `jobs`. Once done, APEC will be caught by Search 1 and this separate search can be removed.
+
+**Search 3 — Recruiter/direct outreach (not labelled):**
+```
+-label:jobs -from:offres@diffusion.apec.fr subject:(candidature OR opportunité OR poste OR recrutement OR "Finance Director" OR "Directeur Financier" OR "FP&A" OR "Contrôleur de Gestion") after:YYYY/MM/DD before:YYYY/MM/DD
+```
+Excludes both labelled emails and APEC (already caught by Search 2) to prevent double-counting.
 
 **Pre-screening before thread reads (saves tokens on known duplicates):**
 
