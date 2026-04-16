@@ -110,14 +110,14 @@ def parse_application_notes(lines):
     location = ""
     for line in lines:
         if "**Role:**" in line or "Role:" in line:
-            # "Finance Director @ RAYDIALL" or "**Role:** title @ company"
-            clean = re.sub(r"\*\*Role:\*\*", "", line).strip()
+            # Strip bold markers or plain "Role:" prefix, then extract title @ company
+            clean = re.sub(r"\*{0,2}Role:\*{0,2}\s*", "", line).strip()
             if "@" in clean:
                 parts = clean.split("@", 1)
                 job_title = parts[0].strip()
                 company = parts[1].strip()
-        if "**Location" in line or "Location" in line:
-            clean = re.sub(r"\*\*Location[^:]*:\*\*", "", line).strip()
+        if "**Location" in line or "Location:" in line:
+            clean = re.sub(r"\*{0,2}Location[^:]*:\*{0,2}\s*", "", line).strip()
             # Remove zone emoji if present
             clean = re.sub(r"[🟢🟡🟠🔴🌐]", "", clean).strip()
             location = clean.split("·")[0].strip()  # take city part before any ·

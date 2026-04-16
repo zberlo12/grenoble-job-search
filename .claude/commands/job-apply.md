@@ -160,15 +160,32 @@ Then call `notion-update-page` to write the full content with three sections.
 
 ## Cover Letter
 
-[full cover letter]
+[opening paragraph]
+
+[body paragraph 1]
+
+[body paragraph 2]
+
+[closing paragraph]
+
+**CRITICAL — Cover Letter section rules (the Word script maps paragraphs sequentially):**
+- Include ONLY the body paragraphs — no name, no sub-headline, no contact info, no date, no
+  company address, no "Objet:" line, no "Madame/Monsieur", no "Cordialement/Zachary Berlo"
+- All those elements are already in the Word template; adding them here duplicates them
+- 4 paragraphs is the standard: opening · body1 · body2 · closing
+- Each paragraph on its own line with a blank line between
 
 ---
 
 ## Application Notes
 
 **Role:** [Job Title] @ [Company]
-**Priority:** [A/B]  ·  **CV Approach:** [approach]  ·  **Location/Zone:** [location]
+**Location:** [City (Dept)]
+**Priority:** [A/B]  ·  **CV Approach:** [approach]  ·  **Zone:** [zone]
 **Job URL:** [url if available]
+
+**IMPORTANT — Role and Location must be on their own dedicated lines as shown above.**
+**The Word script reads these exact labels to build the company addressee and subject line.**
 
 ### Key selling points for this application
 - [experience that maps to requirement 1]
