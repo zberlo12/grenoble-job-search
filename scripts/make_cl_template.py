@@ -68,10 +68,11 @@ def main():
 
     STATIC = {
         "Madame, Monsieur",
-        "Je serais ravi",
         "Cordialement",
         "Zachary Berlo",
     }
+    # NOTE: "Je serais ravi" is intentionally NOT static — it becomes {{CLOSING_PARA}}
+    # so the closing can be customised per application via Notion.
 
     placeholders = [
         "{{DATE}}",
@@ -98,6 +99,13 @@ def main():
         print(f"Replacing '{text[:60]}' -> {placeholders[ph_index]}")
         replace_para_text(para, placeholders[ph_index])
         ph_index += 1
+
+    # Remove any residual "Je serais ravi" line — this was a static sign-off in the
+    # Raydiall source that is now superseded by {{CLOSING_PARA}}.
+    to_delete = [p for p in doc.paragraphs if p.text.strip().startswith("Je serais ravi")]
+    for p in to_delete:
+        p._element.getparent().remove(p._element)
+        print(f"Deleted residual static paragraph: 'Je serais ravi...'")
 
     doc.save(OUTPUT)
     print(f"\nTemplate saved: {OUTPUT}")

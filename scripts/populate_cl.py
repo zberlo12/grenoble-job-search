@@ -153,6 +153,16 @@ def replace_placeholder(doc, placeholder, new_text):
     return replaced
 
 
+def delete_placeholder_paragraph(doc, placeholder):
+    """Remove the paragraph containing a placeholder entirely (used when value is empty)."""
+    for para in doc.paragraphs:
+        if placeholder in para.text:
+            p = para._element
+            p.getparent().remove(p)
+            return True
+    return False
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -251,8 +261,13 @@ def main():
     }
 
     for placeholder, value in replacements.items():
-        ok = replace_placeholder(doc, placeholder, value)
-        status = "[OK]" if ok else "[NOT FOUND]"
+        if not value and placeholder == "{{BODY_PARA_3}}":
+            # Delete the paragraph entirely rather than leaving a blank line
+            ok = delete_placeholder_paragraph(doc, placeholder)
+            status = "[DELETED — empty]" if ok else "[NOT FOUND]"
+        else:
+            ok = replace_placeholder(doc, placeholder, value)
+            status = "[OK]" if ok else "[NOT FOUND]"
         print(f"  {placeholder}: {status}")
 
     # Output filename
