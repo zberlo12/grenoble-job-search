@@ -252,8 +252,11 @@ Documents drafted for [Job Title] @ [Company]:
    └── [CV output filename from script]
    └── [CL output filename from script]
 
+🔗 Job posting: [Job URL — for ChatGPT writing review against JD]
+
 Next steps:
 1. Open the Word files — review CV headline and LM opener first.
-2. Review the Application Notes in Notion for anything to verify before submitting.
-3. When submitted, update the Notion row Status to "Applied" and set Date Applied.
+2. Paste the JD link above into ChatGPT to cross-check writing against requirements.
+3. Review the Application Notes in Notion for anything to verify before submitting.
+4. When submitted, run /job-status to mark as Applied.
 ```
