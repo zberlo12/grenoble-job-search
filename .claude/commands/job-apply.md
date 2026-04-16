@@ -29,22 +29,23 @@ Application Documents, linked back to the job row for future comparison.
 
 Parse `$ARGUMENTS`:
 
-**Blank** → Fetch all rows with `Status = "To Apply"` from the Job Applications DB. Sort by Date Added ascending. Present a numbered selection list:
+**Blank** → Fetch all rows with `Status = "To Apply"` from the Job Applications DB. Sort by Date Added ascending. Present a numbered comparison table — same format as `/job-review-weekly`:
 
 ```
-## To Apply Queue — pick a role to prepare documents for
+## To Apply Queue — [N] roles ready for documents
 
-1. [Job Title] @ [Company] — [Location] · [Priority] · added [date]
-   [one-line summary from Notes]
-
-2. [Job Title] @ [Company] — [Location] · [Priority] · added [date]
-   [one-line summary from Notes]
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line decision note] | [link](url) or — |
 ...
-
-Type a number to select, or type a job title/company name.
 ```
 
-If the queue is empty, tell Zack "No roles in To Apply status — run /job-week-review to promote listings from Potentially Apply first." and stop.
+Then ask:
+> "Which numbers do you want to draft documents for? List them (e.g. `1,3`) or type `all`."
+
+Draft documents for each selected row in order. Skip unselected rows — leave them in `To Apply`.
+
+If the queue is empty, say "No roles in To Apply status — run `/job-review-weekly` to promote listings from Potentially Apply first." and stop.
 
 **Number** (e.g. `2`) → use the row at that position from the list above.
 
