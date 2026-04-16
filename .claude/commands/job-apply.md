@@ -66,7 +66,7 @@ After identifying the row, fetch it fully. Extract: Job Title, Company, Location
 Call all three simultaneously:
 
 **A. Candidate Knowledge**
-`notion-fetch` the Candidate Profile page (`3412fc3ca02a8132a0ccd25bbfe43fee`). Extract all populated fields — metrics, highlights, talking points.
+`notion-fetch` the Candidate Profile page (`3412fc3ca02a8132a0ccd25bbfe43fee`). Extract all populated fields — metrics, highlights, talking points, and critically the **Cover Letter Writing Rules** section. These rules are mandatory constraints on every CL draft.
 
 **B. Base CV Template**
 Detect JD language first: French JD → `FR`, English JD → `EN`, bilingual → `FR`.
