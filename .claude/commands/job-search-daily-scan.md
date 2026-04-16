@@ -2,7 +2,7 @@
 description: Daily Gmail job alert scan agent (Gmail-only). Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. For Indeed direct searches use /job-search-indeed-local or /job-search-indeed-remote. This runs automatically each morning — do not invoke manually unless testing.
 argument-hint: Optional. `MM/DD/YY` for a single day, `MM/DD/YY+` to catch up from that date through yesterday, or append `@source` to filter to one sender e.g. `03/26/26+ @linkedin` or `04/14/26 @cadremploi`. Default (no arg) scans yesterday, all sources.
 model-note: Schedule this cron on Claude Sonnet (cost-efficient). The tiebreaker rule in Step 5 compensates for Sonnet's weaker judgment on borderline calls by biasing toward Needs Info rather than Skip.
-allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
+allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-fetch
 ---
 
 # Daily Job Alert Scan Agent
@@ -206,6 +206,43 @@ Properties (SQLite format):
 | `Missing Info` | JSON array string e.g. `"[\"Salary\", \"Hybrid policy\"]"` — from: `Salary`, `Hybrid policy`, `Scope`, `Full JD`, `Company name`. Populate when rescue gate applied |
 | `Notes` | 2–3 sentence analysis; if rescue gate applied, start with `"QUEUED:"` |
 | `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` |
+
+---
+
+## Step 6B — Application Response Check (runs once per daily scan, not per date)
+
+After completing all date iterations, run this check once for all active applications.
+This is the same logic as `/job-status` — running it here means the daily scan handles
+response tracking automatically without needing a separate manual run.
+
+**Fetch active applications:**
+Search the Job Applications database for rows with `Status = "Applied"` or `Status = "Interview"`.
+
+**For each, search Gmail for response emails:**
+```
+"[Company]" (entretien OR interview OR candidature OR retenu OR sélectionné OR refusé OR rejected OR suite OR félicitations OR offer) after:YYYY/MM/DD -label:jobs
+```
+Use the row's `Date Applied` (or `Date Added` as fallback) for `after:`.
+
+**Classify any found thread:**
+- **Interview** → subject/body contains: entretien, interview, rendez-vous, call, visio, rencontrer
+- **Offer** → contains: offre, proposition, félicitations, offer letter, package
+- **Rejected** → contains: refusé, ne correspond pas, other candidates, poursuivons sans, candidature n'a pas été retenue
+- **Unknown** → can't classify — include in digest for manual review
+
+**Auto-expiry:**
+If `Date Applied` is more than **60 days** ago and no response found → update Notion:
+- `Status: Dismissed`
+- `Notes`: append `" | Auto-expired: no response after 60 days"`
+Do NOT alert Zack for auto-expiries — just log them in the digest.
+
+**Update Notion for any responses found:**
+- `Status` → Interview / Rejected / Offer
+- `date:Date Response:start` → today's date
+- `Gmail Thread URL` → `https://mail.google.com/mail/u/0/#all/[threadId]`
+- `Notes` → append `" | [Status] detected by daily scan [date]"`
+
+**Silent if nothing found** — only include in the digest if there are actual updates.
 
 ---
 

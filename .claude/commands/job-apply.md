@@ -187,10 +187,9 @@ Then call `notion-update-page` to write the full content with three sections.
 ## Step 7 — Update Job Applications Row
 
 Call `notion-update-page` on the job row with:
+- `Status` → `Docs Ready` (documents created, not yet submitted — Zack confirms actual submission via `/job-status`)
 - `Docs URL` → the URL of the new application document page
 - `Notes` → append `" | Docs drafted [YYYY-MM-DD]"` to existing notes
-
-Do not change Status — Zack controls when to move to `Applied`.
 
 ---
 
