@@ -38,15 +38,16 @@ Output a numbered comparison table:
 ```
 ## Potentially Apply — Weekly Review ([N] listings)
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes |
-|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line summary] |
-| 2 | ... | ... | ... | ... | ... | ... | ... |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line summary] | [URL or —] |
+| 2 | ... | ... | ... | ... | ... | ... | ... | ... |
 ...
 ```
 
 Keep the Notes column to one short line — the decision-relevant point only (e.g. "RAF scope,
 French-only, salary unknown" or "FP&A at international pharma, hybrid confirmed").
+The 🔗 column should contain the Job URL from Notion as a markdown link `[link](url)`, or `—` if none stored.
 
 ---
 
