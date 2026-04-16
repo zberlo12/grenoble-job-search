@@ -105,7 +105,12 @@ For each listing, extract:
 - Company name (or "Not disclosed" if agency)
 - Location (city)
 - Salary (if stated)
-- Job URL / apply link
+- Job URL / apply link — **always extract a clean, storable URL using this priority:**
+  1. If the URL contains `jk=XXXXXXX` (either a direct `/viewjob?jk=` or embedded in a `pagead/clk` URL) → extract the jk value and store `https://fr.indeed.com/viewjob?jk=XXXXXXX`. This is the canonical, stable URL.
+  2. If the URL is a short Indeed link (`to.indeed.com/...`) → store it as-is.
+  3. If the URL is a LinkedIn job URL → store it as-is.
+  4. If no URL at all → store `"Not available"` explicitly. **Never leave the field blank.**
+  Pagead URLs contain `jk=` embedded in their query string — always extract it rather than storing the full tracking URL.
 - Contract type (CDI / CDD / Interim)
 
 ---
