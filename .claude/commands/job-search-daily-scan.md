@@ -140,6 +140,16 @@ Only call `gmail_read_thread` for threads that passed pre-screening or could not
 
 From each email, extract every distinct job listing. Job alert emails often contain multiple listings.
 
+**Alert keyword extraction (do this once per thread, before extracting listings):**
+Parse the thread subject to extract the alert search term. Try these patterns in order:
+1. French: `"pour (.+?) (?:à|en|dans|sur)"` → keyword = match group 1
+2. French alt: `"(?:alerte emploi|offres?)\s*:?\s*(.+)"` → keyword = match group 1
+3. English: `"for (.+?) (?:near|in|at)"` → keyword = match group 1
+4. Fallback: derive from sender domain — `jobalert.indeed.com` → `"Indeed"`, `linkedin.com` → `"LinkedIn"`, `alertes.cadremploi.fr` → `"Cadremploi"`, `offres@diffusion.apec.fr` → `"APEC"`
+
+Clean the result: trim whitespace, strip trailing punctuation. Store as `alert_keyword`.
+Apply this value to every listing extracted from this thread.
+
 For each listing, extract:
 - Job title
 - Company name (or "Not disclosed" if agency)
@@ -202,7 +212,7 @@ If ALL of the following are true:
 
 Only if the listing has enough information to rank it does Step 5 proceed to the standard A/B/C/Skip assignment below.
 
-**Tiebreaker rule:** When it is genuinely unclear whether a listing clears the rescue gate, always route to `Needs Info`. The cost of a false-negative (missed application) is higher than the cost of a false-positive (30 seconds in `/job-review`). Only assign Skip or C when a disqualifier is unambiguous — not just probable.
+**Tiebreaker rule:** When it is genuinely unclear whether a listing clears the rescue gate, always route to `Needs Info`. The cost of a false-negative (missed application) is higher than the cost of a false-positive (30 seconds in `/job-review`). Only assign Dismissed or C when a disqualifier is unambiguous — not just probable.
 
 ---
 
@@ -221,7 +231,7 @@ Only if the listing has enough information to rank it does Step 5 proceed to the
 - 🟢 A: Senior finance/FP&A/controlling, Green or Yellow zone, CDI, English exposure, ≥€55K
 - 🟡 B: Good fit on 3/4 criteria; or Tier A company with one weakness
 - 🔴 C: Multiple mismatches or one disqualifying factor
-- ⛔ Skip: Definitive disqualifier (Paris on-site, clearly junior, <€40K stated, unrelated role)
+- ⛔ Dismissed: Definitive disqualifier (Paris on-site, clearly junior, <€40K stated, unrelated role) → **do not skip silently**. Write to Notion with `Status = "Dismissed"`, populate `Red Flags` with the applicable reason(s) (Far location / Below salary / Junior scope / Off-topic), and set `Notes = "Auto-dismissed: [reason in one phrase]"`. All other fields (title, company, URL, alert keyword) still populated normally.
 
 **Red flags to check:**
 - Salary below €55K or not disclosed
@@ -235,7 +245,8 @@ Only if the listing has enough information to rank it does Step 5 proceed to the
 
 ## Step 6 — Write to Notion
 
-For each new listing (not skipped), call `mcp__claude_ai_Notion__notion-create-pages` with:
+Write **every** listing to Notion — including dismissed ones. No listing is silently discarded.
+Call `mcp__claude_ai_Notion__notion-create-pages` with:
 ```
 parent: { type: "data_source_id", data_source_id: "[Job Applications data source ID from profile Section 7]" }
 ```
@@ -251,13 +262,14 @@ Properties (SQLite format):
 | `Salary` | as stated or `"Not stated"` |
 | `Priority` | `A` / `B` / `C` (omit if Skip) |
 | `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Assess` for ranked listings, or `Needs Info` if rescue gate applied. (Note: `Potentially Apply` and `To Apply` are set later by `/job-review`) |
+| `Status` | `To Assess` for ranked listings; `Needs Info` if rescue gate applied; `Dismissed` if definitive disqualifier. (`Potentially Apply` and `To Apply` set later by `/job-review`) |
 | `date:Date Added:start` | today as ISO string e.g. `"2026-04-12"` |
 | `Job URL` | URL string if available |
 | `Gmail Thread URL` | `https://mail.google.com/mail/u/0/#all/[threadId]` if from Gmail |
-| `Red Flags` | JSON array string e.g. `"[\"Low salary\"]"` — from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope` |
+| `Red Flags` | JSON array string e.g. `"[\"Low salary\"]"` — from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope`, `Off-topic` |
 | `Missing Info` | JSON array string e.g. `"[\"Salary\", \"Hybrid policy\"]"` — from: `Salary`, `Hybrid policy`, `Scope`, `Full JD`, `Company name`. Populate when rescue gate applied |
-| `Notes` | 2–3 sentence analysis; if rescue gate applied, start with `"QUEUED:"` |
+| `Alert Keyword` | The alert search term extracted from the email subject (e.g. `"Directeur Financier"`, `"FP&A Grenoble"`) |
+| `Notes` | 2–3 sentence analysis; if rescue gate applied, start with `"QUEUED:"`; if dismissed, start with `"Auto-dismissed: [reason]"` |
 | `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` |
 
 ---
@@ -323,14 +335,16 @@ Call `mcp__claude_ai_Notion__notion-update-page` with `command: "insert_content_
 ```markdown
 ## Job Alert Scan — [DATE]
 
-**New listings found:** [N]  ·  **Already in Notion (skipped):** [N]  ·  **Written to Notion:** [N]  ·  **Queued for review:** [N]
+📊 **[N] listings found in emails  ·  [N] pursued  ·  [N] dismissed  ·  [N] duplicates skipped**
+
+**New listings written:** [N]  ·  **Queued for review:** [N]  ·  **Already in Notion:** [N]
 
 ### By Priority
 - 🟢 A: [N] — [titles if any]
 - 🟡 B: [N] — [titles if any]
 - 🔴 C: [N]
 - ⏸️ Needs Info: [N]
-- ⛔ Skip: [N]
+- ⛔ Dismissed: [N] — top reason: [most common Red Flag among dismissed rows]
 
 ### Sources
 [Breakdown: LinkedIn N, Indeed email N, APEC N, WTTJ N, Cadremploi N, Direct/recruiter N, etc.]

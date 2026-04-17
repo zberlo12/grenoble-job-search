@@ -49,6 +49,22 @@ Count occurrences of each flag value. Show top 3.
 Derive zone from Location field using profile Section 4 zone tables.
 Count: Green / Yellow / Orange / Red / Remote.
 
+### Market visibility (rows in window — includes Dismissed rows)
+- Total found = all rows with Date Added in window (pursued + dismissed)
+- Pursued = rows where Status ≠ "Dismissed" at point of writing
+- Dismissed = rows where Status = "Dismissed"
+- Pass rate = Pursued / Total × 100%
+
+### Dismiss reason breakdown (Dismissed rows in window)
+Count occurrences of each Red Flag value on rows with Status = "Dismissed". Show top 4.
+
+### Alert performance (rows in window, grouped by Alert Keyword field)
+For each distinct Alert Keyword value:
+- Total rows with that keyword
+- Pursued rows (Status ≠ "Dismissed")
+- Pass rate = Pursued / Total
+Sort by Total descending. Omit rows where Alert Keyword is blank.
+
 ---
 
 ## Step 3 — Output
@@ -81,6 +97,23 @@ Avg days to response: [N]
 
 ### By Zone (last [N] days)
 Green [N]  ·  Yellow [N]  ·  Orange [N]  ·  Red [N]  ·  Remote [N]
+
+### Market Visibility (last [N] days)
+[N] listings found in emails  ·  [N] pursued ([N]%)  ·  [N] dismissed ([N]%)
+
+Top dismiss reasons:
+1. [flag] — [N]
+2. [flag] — [N]
+3. [flag] — [N]
+
+### Alert Performance (last [N] days)
+| Alert Keyword | Found | Pursued | Pass rate |
+|---|---|---|---|
+| [keyword] | [N] | [N] | [N]% |
+| [keyword] | [N] | [N] | [N]% |
+
+[If any keyword has 0% pass rate: "⚠️ '[keyword]' has 0% pass rate — consider pausing or refining this alert."]
+[If no Alert Keyword data yet: "Alert performance data will appear after the first daily scan runs."]
 
 ### Insight
 [1–2 sentence observation — e.g.:]

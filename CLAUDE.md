@@ -98,7 +98,7 @@ The second user reuses the existing Notion connection and token — no new integ
 
 ## Notion Database Schema
 
-**Job Applications**: Job Title (title), Company, Source (select), Location, Salary, Priority (A/B/C select), CV Approach (select), Status (select: To Assess/To Apply/Applied/Interview/Offer/Rejected/On Hold), Date Added, Date Applied, Date Response, Job URL, Gmail Thread URL, Red Flags (multi-select), Notes (rich text), English (checkbox)
+**Job Applications**: Job Title (title), Company, Source (select), Location, Salary, Priority (A/B/C select), CV Approach (select), Status (select: To Assess/Needs Info/Potentially Apply/To Apply/Docs Ready/Applied/Interview/Offer/Rejected/Dismissed/On Hold), Date Added, Date Applied, Date Response, Job URL, Gmail Thread URL, Red Flags (multi-select), Alert Keyword (text), Notes (rich text), English (checkbox)
 
 **Target Companies**: Company (title), Tier (A/B/C/D select), Sector, Location, Careers URL, Last Checked (date), Notes
 

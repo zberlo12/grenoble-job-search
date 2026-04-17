@@ -158,8 +158,8 @@ Create all pages/databases in this order (all silently, no progress messages unt
      Location (text), Salary (text), Priority (select: A/B/C), CV Approach (select: Standard/FP&A Focus/Cost Control Focus/Transformation Focus),
      Status (select: To Assess/Needs Info/Potentially Apply/To Apply/Docs Ready/Applied/Interview/Offer/Rejected/Dismissed/On Hold),
      Date Added (date), Date Applied (date), Date Response (date), Job URL (url), Gmail Thread URL (url),
-     Red Flags (multi-select: Low salary/French only/No hybrid/Far location/Fixed-term/Junior scope),
-     Missing Info (multi-select: Salary/Hybrid policy/Scope/Full JD/Company name), Notes (rich text), English (checkbox)
+     Red Flags (multi-select: Low salary/French only/No hybrid/Far location/Fixed-term/Junior scope/Off-topic),
+     Alert Keyword (text), Missing Info (multi-select: Salary/Hybrid policy/Scope/Full JD/Company name), Notes (rich text), English (checkbox)
 8. Create a database titled **"Target Companies"** under Job Search:
    - Company (title), Tier (select: A/B/C/D), Sector (text), Location (text), Careers URL (url), Last Checked (date), Notes (text)
 9. Create a database titled **"Open To-Dos"** under Job Search:
