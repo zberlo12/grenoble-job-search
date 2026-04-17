@@ -6,14 +6,22 @@ allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notio
 
 # Job Status Review
 
-You are helping Zack check the status of all active job applications and update them
-without needing to open Notion directly.
+## Step 0 — Load User Profile
+
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context: **Section 1** (user name), **Section 7** (Notion IDs), **Section 9** (auto-expiry threshold).
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+---
+
+You are helping the user (name from profile) check the status of all active job applications and
+update them without needing to open Notion directly.
 
 ---
 
 ## Step 1 — Fetch Active Applications
 
-Search the Job Applications database (`collection://73c7671a-f600-40a1-807a-83375c3160a9`)
+Search the Job Applications database (data source ID from profile Section 7)
 for rows with Status in: `Docs Ready`, `Applied`, `Interview`.
 
 Sort: Interview first, then Applied (oldest first), then Docs Ready.
@@ -43,9 +51,9 @@ For any thread found:
 - Note the thread ID for linking to Notion
 
 **Auto-expiry check (run during this step):**
-For each `Applied` row where `Date Applied` is more than 60 days ago and no response
+For each `Applied` row where `Date Applied` is more than the auto-expiry threshold (from profile Section 9) ago and no response
 found in Gmail → mark for auto-expiry: Status → `Dismissed`,
-Notes → append `" | Auto-expired: no response after 60 days"`.
+Notes → append `" | Auto-expired: no response after [threshold] days"`.
 
 ---
 

@@ -6,19 +6,23 @@ allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__noti
 
 # Target Companies Careers Sweep
 
-You are checking whether Zack's tracked Target Companies (Tier A and B) have any relevant
-open finance roles. This bypasses job boards entirely and goes direct to source.
+## Step 0 — Load User Profile
+
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context: **Section 1** (user name), **Section 4** (location zones), **Section 7** (Notion IDs — Target Companies DB ID, Job Applications data source ID).
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+---
+
+You are checking the user's tracked Target Companies (Tier A and B) for relevant open finance roles.
+This bypasses job boards entirely and goes direct to source.
 
 ---
 
 ## Step 1 — Fetch Target Companies
 
-Fetch the Target Companies database:
-```
-collection://108a671739474a83a1b53f1eb8d54de4
-```
-
-Wait — the collection ID above may vary. Use `mcp__claude_ai_Notion__notion-fetch` on database ID `108a671739474a83a1b53f1eb8d54de4` to get the schema and data source URL, then fetch the rows.
+Fetch the Target Companies database (ID from profile Section 7).
+Use `mcp__claude_ai_Notion__notion-fetch` on the database ID to get the schema and data source URL, then fetch the rows.
 
 Filter to **Tier A and Tier B** companies only (or just Tier A if `$ARGUMENTS` = "A", just Tier B if "B").
 
@@ -72,7 +76,7 @@ For each finance role identified, apply standard `/job-search` analysis:
 
 ## Step 4 — Deduplicate Against Notion
 
-For each role that passes Step 3, check Job Applications database (ID: `09b29be7bb764b16b173321f469b01e2`):
+For each role that passes Step 3, check the Job Applications database (ID from profile Section 7):
 - Search `"[Company] [Job Title]"` within last 30 days
 - If found → skip (already tracked)
 
@@ -83,7 +87,7 @@ For each role that passes Step 3, check Job Applications database (ID: `09b29be7
 For each new role surviving dedup:
 
 ```
-parent: { type: "data_source_id", data_source_id: "73c7671a-f600-40a1-807a-83375c3160a9" }
+parent: { type: "data_source_id", data_source_id: "[Job Applications data source ID from profile Section 7]" }
 ```
 
 | Property | Value |

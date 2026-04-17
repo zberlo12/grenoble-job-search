@@ -6,14 +6,22 @@ allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__noti
 
 # Job Application Dashboard
 
-You are displaying a read-only pipeline overview of all active job applications for Zack.
+## Step 0 — Load User Profile
+
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context: **Section 1** (user name), **Section 4** (location zones), **Section 7** (Notion IDs).
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+---
+
+You are displaying a read-only pipeline overview of all active job applications for the user (name from profile).
 No updates, no prompts — just a clear picture of where everything stands.
 
 ---
 
 ## Step 1 — Fetch All Open Applications
 
-Search the Job Applications database (`collection://73c7671a-f600-40a1-807a-83375c3160a9`)
+Search the Job Applications database (data source ID from profile Section 7)
 and retrieve all rows. Filter client-side to keep only these **open** statuses:
 
 `Needs Info` · `To Assess` · `Potentially Apply` · `To Apply` · `Docs Ready` · `Applied` · `Interview` · `Offer` · `On Hold`
@@ -47,11 +55,11 @@ All groups use the same base table format (consistent with `/job-review-weekly`)
   - `🔗 JD` → Job URL (the original listing)
   - `📧 Gmail` → Gmail Thread URL as `[thread](https://mail.google.com/mail/u/0/#all/[threadId])` — show only if Gmail Thread URL is set, otherwise `—`
 
-**Zone emoji** (derive from Location field):
-- Dept 38 core (Grenoble, Saint-Égrève, Meylan, Échirolles, Crolles, Bernin, Voreppe…) → 🟢
-- Voiron, Chambéry, Pontcharra, Saint-Marcellin → 🟡
-- Valence, Annecy, Albertville, Ugine → 🟠
-- Lyon, Paris, Luxembourg → 🔴
+**Zone emoji** (derive from Location field using zone tables from profile Section 4):
+- Green zone cities/departments from profile → 🟢
+- Yellow zone cities/departments from profile → 🟡
+- Orange zone cities/departments from profile → 🟠
+- Red zone cities/departments from profile → 🔴
 - Remote / France → 🌐
 - Unknown → —
 

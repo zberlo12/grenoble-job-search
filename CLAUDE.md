@@ -71,39 +71,21 @@ allowed-tools: comma-separated list of MCP tool IDs
 **Local backup** (`.mcp.json` has token — `mcp__notion__*` tools if local server runs):
 The `.mcp.json` file contains the Notion API token and local MCP server config. The claude.ai Notion integration (`mcp__claude_ai_Notion__*`) is what's confirmed working in all skills — use those tool names.
 
-## Candidate Profile (used in both skills)
+## User Profile & Config
 
-- **Role level**: Finance Director / FP&A (senior, 10+ years)
-- **Base**: Grenoble, France
-- **Salary floor**: €55K (flag below; reject below €45K)
-- **Language**: English exposure preferred; French-only is a yellow flag
-- **Contract**: CDI strongly preferred
-- **Key background**: Multi-entity FP&A, P2P governance (Signavio/SAP), industrial cost control, procurement, US GAAP + French GAAP
+All user-specific configuration lives in Notion — **not** in this file or in skill files.
 
-## Location Zone Rules (Grenoble-centric)
+**User Profile & Config page ID**: `3452fc3ca02a811ab75af9805f50ef8b`
 
-These zones are applied in every job analysis — never skip location assessment:
+This page contains: candidate identity, role & compensation, background keywords, location zones,
+job title alerts, Gmail sources, all Notion IDs, CV approach options, and lifecycle rules.
 
-| Zone | Commute | Dept | Decision rule |
-|---|---|---|---|
-| 🟢 Green | 0–25 min | 38 core | Apply freely |
-| 🟡 Yellow | 30–50 min | 38 outskirts, 73 Chambéry | Apply — confirm hybrid before writing documents |
-| 🟠 Orange | 1h–1h45 | 26 Valence, 74 Annecy, 73 Ugine | Only if hybrid ≤2 days/week explicitly stated |
-| 🔴 Red | 1h15+ / no hybrid | 69 Lyon, 75/92 Paris, 73 Maurienne | Skip without hesitation |
-
-Dept 73: check the specific town (Chambéry = Yellow; La Tour-en-Maurienne = Red).
-Dept 01: treat as Orange/Red.
+Skills load this page at runtime (Step 0 in each skill). To adapt the system for a new user:
+1. Duplicate the User Profile & Config page in Notion and fill in their details
+2. Update `notion_config_page_id` in `.mcp.json` to the new page's ID
+3. Update the ID above in this file
 
 ## Notion Database Schema
-
-Three databases — IDs stored in `.mcp.json` (gitignored). Created 2026-04-12 under the "Job Search" page.
-
-| Database | Notion ID |
-|---|---|
-| Job Applications | `09b29be7bb764b16b173321f469b01e2` |
-| Target Companies | `108a671739474a83a1b53f1eb8d54de4` |
-| Open To-Dos | `e04c0c16b774448b86b0c309a684190b` |
-| Job Search (parent page) | `3402fc3ca02a8029a6bcead9445285aa` |
 
 **Job Applications**: Job Title (title), Company, Source (select), Location, Salary, Priority (A/B/C select), CV Approach (select), Status (select: To Assess/To Apply/Applied/Interview/Offer/Rejected/On Hold), Date Added, Date Applied, Date Response, Job URL, Gmail Thread URL, Red Flags (multi-select), Notes (rich text), English (checkbox)
 
@@ -111,9 +93,4 @@ Three databases — IDs stored in `.mcp.json` (gitignored). Created 2026-04-12 u
 
 **Open To-Dos**: Task (title), Category (select), Priority (select), Due Date, Done (checkbox), Notes
 
-## Historical Data
-
-HTML source of truth (pre-Notion):
-`C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\Grenoble Job Search – Dashboard.html`
-
-Contains: ~22+ applications, Tier A/B target companies with careers URLs, geography zone reference, open to-dos, networking contacts. Import this into Notion once databases are created.
+All database IDs are stored in the User Profile & Config page (Section 7) and in `.mcp.json`.

@@ -6,9 +6,17 @@ allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__noti
 
 # Job Review Queue Drainer
 
-You are helping Zack (senior Finance Director / FP&A, Grenoble-based) work through the queue of
-job listings that the daily scan flagged as "Needs Info" — plausible matches where salary,
-hybrid policy, full scope, or company name was missing from the source alert.
+## Step 0 — Load User Profile
+
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context: **Section 1** (user name), **Section 7** (Notion IDs — Job Applications data source ID).
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+---
+
+You are helping the user (name from profile) work through the queue of job listings that the daily
+scan flagged as "Needs Info" — plausible matches where salary, hybrid policy, full scope, or company
+name was missing from the source alert.
 
 Your goal: enrich each queued row with the missing information, re-rank it using the
 standard `/job-search` criteria, and update the Notion row so it moves out of the queue.
@@ -17,17 +25,13 @@ standard `/job-search` criteria, and update the Notion row so it moves out of th
 
 ## Step 1 — Fetch the Queue
 
-Call `mcp__claude_ai_Notion__notion-fetch` on the Job Applications data source:
-
-```
-collection://73c7671a-f600-40a1-807a-83375c3160a9
-```
+Call `mcp__claude_ai_Notion__notion-fetch` on the Job Applications data source (ID from profile Section 7).
 
 Filter the returned rows client-side to `Status = "Needs Info"`. Sort oldest first by `Date Added`.
 
 If `$ARGUMENTS` is a number, limit to that many rows. Otherwise process all of them.
 
-If the queue is empty, tell Zack "Queue is empty — nothing to review" and stop.
+If the queue is empty, say "Queue is empty — nothing to review" and stop.
 
 ---
 

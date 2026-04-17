@@ -6,28 +6,30 @@ allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notio
 
 # Weekly Job Review
 
-You are helping Zack (senior Finance Director / FP&A, Grenoble-based) make final apply
-decisions on the week's "Potentially Apply" listings. These are Priority B listings that
-passed the quality bar but haven't been committed to yet.
+## Step 0 — Load User Profile
 
-Your goal: present a clear comparison of all candidates, let Zack choose which ones to
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context: **Section 1** (user name), **Section 7** (Notion IDs — Job Applications data source ID).
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+---
+
+You are helping the user (name from profile) make final apply decisions on the week's "Potentially Apply"
+listings. These are Priority B listings that passed the quality bar but haven't been committed to yet.
+
+Your goal: present a clear comparison of all candidates, let the user choose which ones to
 actually pursue, and update Notion accordingly.
 
 ---
 
 ## Step 1 — Fetch the Holding Queue
 
-Call `mcp__claude_ai_Notion__notion-fetch` on the Job Applications data source:
-
-```
-collection://73c7671a-f600-40a1-807a-83375c3160a9
-```
+Call `mcp__claude_ai_Notion__notion-fetch` on the Job Applications data source (ID from profile Section 7).
 
 Filter client-side to `Status = "Potentially Apply"`. Sort: Priority A first (if any slipped
 through), then B; within each group, oldest Date Added first.
 
-If the queue is empty, tell Zack "Nothing in the Potentially Apply queue — nothing to review"
-and stop.
+If the queue is empty, say "Nothing in the Potentially Apply queue — nothing to review" and stop.
 
 ---
 

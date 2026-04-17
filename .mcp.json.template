@@ -7,5 +7,11 @@
         "NOTION_API_TOKEN": "secret_YOUR_NOTION_TOKEN_HERE"
       }
     }
+  },
+  "notion_config_page_id": "YOUR_USER_PROFILE_PAGE_ID_HERE",
+  "databases": {
+    "job_applications": "YOUR_JOB_APPLICATIONS_DB_ID",
+    "target_companies": "YOUR_TARGET_COMPANIES_DB_ID",
+    "open_todos": "YOUR_OPEN_TODOS_DB_ID"
   }
 }

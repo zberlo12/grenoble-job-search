@@ -7,8 +7,25 @@ allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail
 
 # Daily Job Alert Scan Agent
 
-You are running an automated daily job search scan for a senior Finance Director / FP&A
-professional (Zack) based in Grenoble, France. This runs at 08:00 each morning.
+## Step 0 — Load User Profile
+
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context:
+- **Section 1** — user name and base location
+- **Section 2** — salary floors, contract preference, language preference
+- **Section 4** — location zones
+- **Section 5** — job title alerts (for analysis matching)
+- **Section 6** — Gmail alert sources
+- **Section 7** — all Notion IDs (Job Applications DB, data source, Daily Scans archive page)
+- **Section 9** — lifecycle rules (auto-expiry threshold, dedup window)
+
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+Use all values from the profile throughout. All criteria, IDs, and thresholds below reference the profile.
+
+---
+
+You are running an automated daily job search scan for the user (name from profile). This runs each morning.
 
 Your goal: find all new job listings from yesterday's email alerts, analyse each one,
 write results to Notion, and produce a brief digest.
@@ -117,7 +134,7 @@ For each listing, extract:
 
 ## Step 4 — Deduplicate Against Notion
 
-Database ID: `09b29be7bb764b16b173321f469b01e2`
+Database ID: from profile Section 7 (Job Applications DB)
 
 For each extracted listing that was not already discarded by Gmail pre-screening (Step 2), call `mcp__claude_ai_Notion__notion-search` with a **30-day `created_date_range` filter** (start: today minus 30 days):
 
@@ -184,7 +201,7 @@ Only if the listing has enough information to rank it does Step 5 proceed to the
 
 For each new listing (not skipped), call `mcp__claude_ai_Notion__notion-create-pages` with:
 ```
-parent: { type: "data_source_id", data_source_id: "73c7671a-f600-40a1-807a-83375c3160a9" }
+parent: { type: "data_source_id", data_source_id: "[Job Applications data source ID from profile Section 7]" }
 ```
 
 Properties (SQLite format):
@@ -250,7 +267,7 @@ Do NOT alert Zack for auto-expiries — just log them in the digest.
 
 After processing all listings, append a new dated section to the **Daily Scans** Notion page.
 
-**Daily Scans page ID:** `3402fc3ca02a8169a12ff95493a54064`
+**Daily Scans page ID:** from profile Section 7 (Daily Scans archive)
 
 Call `mcp__claude_ai_Notion__notion-update-page` with `command: "insert_content_after"`, targeting the last block of the page, with Markdown content in the following format:
 

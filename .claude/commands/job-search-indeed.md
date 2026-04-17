@@ -6,8 +6,26 @@ allowed-tools: mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_jo
 
 # Indeed Job Search — Grenoble / Remote
 
-You are running a manual Indeed job search sweep for Zack, a senior Finance Director / FP&A
-professional based in Grenoble, France.
+## Step 0 — Load User Profile
+
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context:
+- **Section 1** — user name, base location (used to set search location)
+- **Section 2** — salary floors, contract preference, language preference
+- **Section 4** — location zones
+- **Section 5** — job title alerts (use these as search groups — see below)
+- **Section 7** — Notion IDs (Job Applications DB and data source IDs)
+- **Section 9** — lifecycle rules (dedup window)
+
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+**Search groups below come from profile Section 5.** The groups listed in Steps 2A/2B are the
+default set for this user — a new user should update Section 5 of their profile to replace them.
+
+---
+
+You are running a manual Indeed job search sweep for the user (name from profile) based in
+the location from their profile.
 
 ---
 
@@ -71,7 +89,7 @@ Total: 3 API calls. Run all in parallel.
 
 ## Step 3 — Deduplicate Against Notion
 
-Database ID: `09b29be7bb764b16b173321f469b01e2`
+Database ID: from profile Section 7 (Job Applications DB)
 
 Collect all results from Steps 2A/2B. Deduplicate across searches first (same job ID = one entry). Then for each unique listing:
 
@@ -138,7 +156,7 @@ For remote search: location zone defaults to 🌐 Remote — assess on role fit 
 
 For each surviving listing (not skipped), call `mcp__claude_ai_Notion__notion-create-pages` with:
 ```
-parent: { type: "data_source_id", data_source_id: "73c7671a-f600-40a1-807a-83375c3160a9" }
+parent: { type: "data_source_id", data_source_id: "[Job Applications data source ID from profile Section 7]" }
 ```
 
 | Property | Value |

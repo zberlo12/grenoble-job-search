@@ -6,22 +6,32 @@ allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notio
 
 # Job Apply — Document Drafter
 
-You are drafting tailored application documents for Zack (Finance Director / FP&A, Grenoble)
-for a specific job listing already ranked in the Notion Job Applications database.
+## Step 0 — Load User Profile
+
+Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Extract into context: **Section 1** (user name, base location), **Section 7** (all Notion IDs), **Section 8** (CV approach options and script flags).
+If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+
+**All Notion IDs below come from profile Section 7** — do not use hardcoded values if profile is loaded.
+
+---
+
+You are drafting tailored application documents for the user (name from profile) for a specific
+job listing already ranked in the Notion Job Applications database.
 
 Your goal: produce a tailored CV and a custom cover letter, saved as a Notion page under
 Application Documents, linked back to the job row for future comparison.
 
 ---
 
-## Notion page IDs (hardcoded — do not fetch dynamically)
+## Notion page IDs (from profile Section 7)
 
-| Resource | Page ID |
+| Resource | Profile Section 7 Key |
 |---|---|
-| Candidate Profile — Zack | `3412fc3ca02a8132a0ccd25bbfe43fee` |
-| CV Templates (parent) | `3412fc3ca02a819e9d52fe0a393f2d23` |
-| Application Documents (parent) | `3412fc3ca02a813a8315fb6fd0a2304e` |
-| Job Applications DB | `collection://73c7671a-f600-40a1-807a-83375c3160a9` |
+| Candidate Profile | Candidate Profile page ID |
+| CV Templates (parent) | CV Templates parent ID |
+| Application Documents (parent) | Application Documents parent ID |
+| Job Applications DB | Job Applications data source ID |
 
 ---
 
@@ -66,18 +76,13 @@ After identifying the row, fetch it fully. Extract: Job Title, Company, Location
 Call all three simultaneously:
 
 **A. Candidate Knowledge**
-`notion-fetch` the Candidate Profile page (`3412fc3ca02a8132a0ccd25bbfe43fee`). Extract all populated fields — metrics, highlights, talking points, and critically the **Cover Letter Writing Rules** section. These rules are mandatory constraints on every CL draft.
+`notion-fetch` the Candidate Profile page (ID from profile Section 7 — "Candidate Profile page ID"). Extract all populated fields — metrics, highlights, talking points, and critically the **Cover Letter Writing Rules** section. These rules are mandatory constraints on every CL draft.
 
 **B. Base CV Template**
 Detect JD language first: French JD → `FR`, English JD → `EN`, bilingual → `FR`.
 
-Map CV Approach + language to template page title:
-- `FP&A Focus` + FR → "CV — FP&A Focus — FR"
-- `FP&A Focus` + EN → "CV — FP&A Focus — EN"
-- `Cost Control Focus` + FR → "CV — Cost Control Focus — FR"
-- `Cost Control Focus` + EN → "CV — Cost Control Focus — EN"
-- `Transformation Focus` + FR/EN → same pattern
-- `Standard` + FR/EN → same pattern
+Map CV Approach + language to template page title using the CV Approach options table from profile Section 8.
+Default template naming pattern: `"CV — [Approach Name] — [LANG]"` (e.g. "CV — FP&A Focus — FR").
 
 `notion-search` for that title under the CV Templates parent page (`3412fc3ca02a819e9d52fe0a393f2d23`), then `notion-fetch` the result.
 
