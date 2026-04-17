@@ -1,20 +1,42 @@
 """
 make_cl_template.py — Run ONCE to create the cover letter Word template.
 
-Reads your Raydiall CL .docx and replaces all variable content with
-{{placeholders}}, saving cl_template.docx. The populate_cl.py script
-fills those placeholders per application.
+Reads your existing cover letter .docx and replaces all variable content with
+{{placeholders}}, saving cl_template.docx to templates/. The populate_cl.py
+script fills those placeholders per application.
 
 Usage:
-    py scripts/make_cl_template.py
+    py scripts/make_cl_template.py <source_cl.docx> [--lang fr|en]
+
+    <source_cl.docx>  Path to your existing cover letter Word file
+    --lang            Language (fr or en, default: fr)
+
+Example:
+    py scripts/make_cl_template.py "C:/My Documents/My_CL_French.docx" --lang fr
+
+Your full name is read from .mcp.json (set via setup.py from your .env profile).
 """
 
+import sys
+import json
+from pathlib import Path
 from docx import Document
 
-SOURCE = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\LM_Raydiall_RAF_FR.docx"
-OUTPUT = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cl_template.docx"
+REPO_ROOT = Path(__file__).parent.parent
+TEMPLATES_DIR = REPO_ROOT / "templates"
 
-NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+def get_full_name():
+    """Read full name from .mcp.json."""
+    mcp_path = REPO_ROOT / ".mcp.json"
+    if mcp_path.exists():
+        try:
+            with open(mcp_path) as f:
+                data = json.load(f)
+            return data.get("full_name", "")
+        except Exception:
+            pass
+    return ""
 
 
 def replace_para_text(para, new_text):
@@ -37,49 +59,52 @@ def replace_cell_text(cell, old_substring, new_text):
 
 
 def main():
-    doc = Document(SOURCE)
+    args = sys.argv[1:]
+    lang = "fr"
+    if "--lang" in args:
+        idx = args.index("--lang")
+        lang = args[idx + 1].lower() if idx + 1 < len(args) else "fr"
+        args = [a for i, a in enumerate(args) if i != idx and i != idx + 1]
 
-    # --- Header table: cell 0 contains Name + Title on separate lines ---
-    # The title line is the one that changes per application
-    header_table = doc.tables[0]
-    left_cell = header_table.rows[0].cells[0]
-    replaced = replace_cell_text(
-        left_cell,
-        "Responsable Administratif",
-        "{{CL_HEADLINE}}",
-    )
-    print(f"Header title replaced: {replaced}")
+    if not args:
+        print(__doc__)
+        sys.exit(1)
 
-    # --- Body paragraphs (top-level, not in table) ---
-    # Structure:
-    #   [0] Date
-    #   [1] Addressee (company name + service)
-    #   [2] Company location
-    #   [3] Subject line
-    #   [4] Salutation — STATIC
-    #   [5] Opening paragraph
-    #   [6] Body paragraph 1
-    #   [7] Body paragraph 2
-    #   [8] Body paragraph 3
-    #   [9] Closing paragraph
-    #   [10] Sign-off line — STATIC
-    #   [11] "Cordialement," — STATIC
-    #   [12] "Zachary Berlo" — STATIC
+    source_path = args[0]
+    output_name = "cl_template.docx" if lang == "fr" else "cl_template_en.docx"
 
-    STATIC = {
-        "Madame, Monsieur",
-        "Cordialement",
-        "Zachary Berlo",
-    }
-    # NOTE: "Je serais ravi" is intentionally NOT static — it becomes {{CLOSING_PARA}}
-    # so the closing can be customised per application via Notion.
+    full_name = get_full_name()
+    if not full_name:
+        print("ERROR: Could not read full_name from .mcp.json.")
+        print("  Run setup.py --profile <name> first, and ensure FULL_NAME is in your .env file.")
+        sys.exit(1)
+
+    if not Path(source_path).exists():
+        print(f"ERROR: Source file not found: {source_path}")
+        sys.exit(1)
+
+    doc = Document(source_path)
+
+    # Header table: replace job title line with placeholder
+    if doc.tables:
+        header_table = doc.tables[0]
+        left_cell = header_table.rows[0].cells[0]
+        # Find and replace any non-name paragraph in the header (the job title line)
+        for para in left_cell.paragraphs:
+            text = para.text.strip()
+            if text and text != full_name:
+                print(f"Header title: replacing '{text}' -> {{{{CL_HEADLINE}}}}")
+                replace_para_text(para, "{{CL_HEADLINE}}")
+                break
+
+    # Static paragraphs to leave unchanged
+    STATIC_STARTS = {"Madame", "Monsieur", "Cordialement", full_name}
 
     placeholders = [
         "{{DATE}}",
         "{{COMPANY_ADDRESSEE}}",
         "{{COMPANY_LOCATION}}",
         "{{SUBJECT_LINE}}",
-        # salutation skipped (static)
         "{{OPENING_PARA}}",
         "{{BODY_PARA_1}}",
         "{{BODY_PARA_2}}",
@@ -92,7 +117,7 @@ def main():
         text = para.text.strip()
         if not text:
             continue
-        if any(text.startswith(s) for s in STATIC):
+        if any(text.startswith(s) for s in STATIC_STARTS):
             continue
         if ph_index >= len(placeholders):
             break
@@ -100,15 +125,10 @@ def main():
         replace_para_text(para, placeholders[ph_index])
         ph_index += 1
 
-    # Remove any residual "Je serais ravi" line — this was a static sign-off in the
-    # Raydiall source that is now superseded by {{CLOSING_PARA}}.
-    to_delete = [p for p in doc.paragraphs if p.text.strip().startswith("Je serais ravi")]
-    for p in to_delete:
-        p._element.getparent().remove(p._element)
-        print(f"Deleted residual static paragraph: 'Je serais ravi...'")
-
-    doc.save(OUTPUT)
-    print(f"\nTemplate saved: {OUTPUT}")
+    TEMPLATES_DIR.mkdir(exist_ok=True)
+    output_path = TEMPLATES_DIR / output_name
+    doc.save(str(output_path))
+    print(f"\nTemplate saved: {output_path}")
     print(f"Replaced {ph_index} variable paragraphs.")
 
 

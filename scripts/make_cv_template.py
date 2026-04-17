@@ -1,18 +1,45 @@
 """
-make_cv_template.py — Run ONCE to create the CV Word template.
+make_cv_template.py — Run ONCE per CV variant to create a Word template.
 
 Reads your base resume .docx, replaces the job title line and profile summary
 with {{CV_HEADLINE}} and {{PROFILE_SUMMARY}} placeholders, and saves a
-template file. The populate_cv.py script fills those placeholders per application.
+template file to templates/. The populate_cv.py script fills those placeholders
+per application.
 
 Usage:
-    py scripts/make_cv_template.py
+    py scripts/make_cv_template.py <source_cv.docx> <output_name>
+
+    <source_cv.docx>  Path to your existing formatted CV Word file
+    <output_name>     Template name without .docx (e.g. cv_template_fpa_fr)
+
+Example:
+    py scripts/make_cv_template.py "C:/My Documents/My_CV.docx" cv_template_fpa_fr
+
+The script looks for your full name (in uppercase) to locate the headline line.
+Your full name is read from .mcp.json (set via setup.py from your .env profile).
 """
 
+import sys
+import json
+from pathlib import Path
 from docx import Document
 
-SOURCE = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\Zack_Resume_English_2025_revised.docx"
-OUTPUT = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cv_template.docx"
+REPO_ROOT = Path(__file__).parent.parent
+TEMPLATES_DIR = REPO_ROOT / "templates"
+
+
+def get_full_name_upper():
+    """Read full name from .mcp.json, return in uppercase for matching."""
+    mcp_path = REPO_ROOT / ".mcp.json"
+    if mcp_path.exists():
+        try:
+            with open(mcp_path) as f:
+                data = json.load(f)
+            name = data.get("full_name", "")
+            return name.upper() if name else ""
+        except Exception:
+            pass
+    return ""
 
 
 def replace_paragraph_text(para, new_text):
@@ -26,10 +53,27 @@ def replace_paragraph_text(para, new_text):
 
 
 def main():
-    doc = Document(SOURCE)
+    if len(sys.argv) < 3:
+        print(__doc__)
+        sys.exit(1)
 
-    # Document is one table, one row, two cells.
-    # Cell 1 = right column: Name → Headline → PROFILE → Summary → Experience
+    source_path = sys.argv[1]
+    output_name = sys.argv[2]
+    if not output_name.endswith(".docx"):
+        output_name += ".docx"
+
+    full_name_upper = get_full_name_upper()
+    if not full_name_upper:
+        print("ERROR: Could not read full_name from .mcp.json.")
+        print("  Run setup.py --profile <name> first, and ensure FULL_NAME is in your .env file.")
+        sys.exit(1)
+
+    if not Path(source_path).exists():
+        print(f"ERROR: Source file not found: {source_path}")
+        sys.exit(1)
+
+    doc = Document(source_path)
+
     table = doc.tables[0]
     right_cell = table.rows[0].cells[1]
     paras = right_cell.paragraphs
@@ -44,7 +88,7 @@ def main():
         if not text:
             continue
 
-        if text == "ZACHARY BERLO":
+        if text == full_name_upper:
             after_name = True
             continue
 
@@ -67,14 +111,16 @@ def main():
             break
 
     if not headline_replaced:
-        print("ERROR: Could not find the headline paragraph.")
+        print(f"ERROR: Could not find the headline paragraph (looked for name: '{full_name_upper}').")
         return
     if not summary_replaced:
-        print("ERROR: Could not find the profile summary paragraph.")
+        print("ERROR: Could not find the PROFILE section.")
         return
 
-    doc.save(OUTPUT)
-    print(f"\nTemplate saved: {OUTPUT}")
+    TEMPLATES_DIR.mkdir(exist_ok=True)
+    output_path = TEMPLATES_DIR / output_name
+    doc.save(str(output_path))
+    print(f"\nTemplate saved: {output_path}")
     print("Run populate_cv.py to fill it for a specific application.")
 
 

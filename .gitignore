@@ -26,3 +26,12 @@ Thumbs.db
 
 # Application documents — personal/sensitive, not for version control
 applications/
+
+# CV/CL templates contain personal content — each user generates their own
+templates/*.docx
+templates/*.doc
+
+# Generated output files
+outputs/*.docx
+outputs/*.doc
+outputs/*.pdf

@@ -32,21 +32,20 @@ from pathlib import Path
 from docx import Document
 from notion_client import Client
 
-BASE = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT"
+REPO_ROOT = Path(__file__).parent.parent
+TEMPLATES_DIR = REPO_ROOT / "templates"
+OUTPUT_DIR = REPO_ROOT / "outputs"
 
 TEMPLATES = {
-    "fpa-fr":         BASE + r"\cv_template_fpa_fr.docx",
-    "costcontrol-fr": BASE + r"\cv_template_costcontrol_fr.docx",
-    "raf-fr":         BASE + r"\cv_template_raf_fr.docx",
-    "fpa-en":         BASE + r"\cv_template_fpa_en.docx",
-    "hof-en":         BASE + r"\cv_template_hof_en.docx",
+    "fpa-fr":         str(TEMPLATES_DIR / "cv_template_fpa_fr.docx"),
+    "costcontrol-fr": str(TEMPLATES_DIR / "cv_template_costcontrol_fr.docx"),
+    "raf-fr":         str(TEMPLATES_DIR / "cv_template_raf_fr.docx"),
+    "fpa-en":         str(TEMPLATES_DIR / "cv_template_fpa_en.docx"),
+    "hof-en":         str(TEMPLATES_DIR / "cv_template_hof_en.docx"),
     # legacy aliases
-    "fr":             BASE + r"\cv_template_fpa_fr.docx",
-    "en":             BASE + r"\cv_template_fpa_en.docx",
+    "fr":             str(TEMPLATES_DIR / "cv_template_fpa_fr.docx"),
+    "en":             str(TEMPLATES_DIR / "cv_template_fpa_en.docx"),
 }
-OUTPUT_DIR = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\Output CVs"
-
-REPO_ROOT = Path(__file__).parent.parent
 
 
 def get_notion_token():

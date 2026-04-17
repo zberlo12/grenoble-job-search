@@ -30,13 +30,14 @@ from pathlib import Path
 from docx import Document
 from notion_client import Client
 
-TEMPLATES = {
-    "fr": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cl_template.docx",
-    "en": r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\WORD VERSION FOR EDIT\cl_template_en.docx",
-}
-OUTPUT_DIR = r"C:\Users\zberl\OneDrive\Documents\France Job Applications\2026\Output CLs"
-
 REPO_ROOT = Path(__file__).parent.parent
+TEMPLATES_DIR = REPO_ROOT / "templates"
+OUTPUT_DIR = REPO_ROOT / "outputs"
+
+TEMPLATES = {
+    "fr": str(TEMPLATES_DIR / "cl_template.docx"),
+    "en": str(TEMPLATES_DIR / "cl_template_en.docx"),
+}
 
 MONTHS_FR = {
     1: "janvier", 2: "février", 3: "mars", 4: "avril",
@@ -124,9 +125,24 @@ def parse_application_notes(lines):
     return company, job_title, location
 
 
+def get_base_city():
+    """Read base city from .mcp.json (written by setup.py from .env profile)."""
+    mcp_path = REPO_ROOT / ".mcp.json"
+    if mcp_path.exists():
+        try:
+            with open(mcp_path) as f:
+                data = json.load(f)
+            return data.get("base_city", "")
+        except Exception:
+            pass
+    return ""
+
+
 def french_date():
     today = date.today()
-    return f"Grenoble, le {today.day} {MONTHS_FR[today.month]} {today.year}"
+    city = get_base_city()
+    prefix = f"{city}, le " if city else ""
+    return f"{prefix}{today.day} {MONTHS_FR[today.month]} {today.year}"
 
 
 def replace_placeholder(doc, placeholder, new_text):

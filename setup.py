@@ -61,6 +61,8 @@ def generate_mcp_json(env: dict, profile: str):
             }
         },
         "notion_config_page_id": env["NOTION_CONFIG_PAGE_ID"],
+        "base_city": env.get("BASE_CITY", ""),
+        "full_name": env.get("FULL_NAME", ""),
         "active_profile": profile
     }
     MCP_JSON_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
