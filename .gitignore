@@ -1,11 +1,15 @@
 # Secrets — never commit these
 .env
 .env.*
+!.env.template
 *.credentials.json
 .credentials.json
 
 # MCP config contains API tokens — commit only the template version
 .mcp.json
+
+# Active profile state — machine-specific
+.active-profile
 
 # Node
 node_modules/
