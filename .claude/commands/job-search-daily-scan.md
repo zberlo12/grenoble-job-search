@@ -9,7 +9,7 @@ allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail
 
 ## Step 0 — Load User Profile
 
-Fetch the User Profile & Config page (ID: `3452fc3ca02a811ab75af9805f50ef8b`) using `mcp__claude_ai_Notion__notion-fetch`.
+Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
 Extract into context:
 - **Section 1** — user name and base location
 - **Section 2** — salary floors, contract preference, language preference
@@ -19,7 +19,7 @@ Extract into context:
 - **Section 7** — all Notion IDs (Job Applications DB, data source, Daily Scans archive page)
 - **Section 9** — lifecycle rules (auto-expiry threshold, dedup window)
 
-If unreachable, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
 
 Use all values from the profile throughout. All criteria, IDs, and thresholds below reference the profile.
 

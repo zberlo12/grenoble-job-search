@@ -11,8 +11,7 @@ Your role is to assess each listing objectively — do not be agreeable or soft-
 
 ## Step 0 — Load User Profile
 
-Fetch the User Profile & Config page from Notion (page ID: `3452fc3ca02a811ab75af9805f50ef8b`).
-Call `mcp__claude_ai_Notion__notion-fetch` on this ID and extract into context:
+Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`. Extract into context:
 - **Section 1** — user name and base location
 - **Section 2** — salary floors, contract preference, language preference
 - **Section 3** — background keywords (for role fit assessment)
@@ -20,7 +19,7 @@ Call `mcp__claude_ai_Notion__notion-fetch` on this ID and extract into context:
 - **Section 7** — Notion IDs (database IDs, data source IDs)
 - **Section 10** — target company tiers (Tier A/B lists)
 
-If the page cannot be fetched, halt: "User Profile page unreachable — check notion_config_page_id in .mcp.json"
+If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
 
 Use these values throughout. All criteria below reference the profile.
 
