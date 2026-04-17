@@ -6,13 +6,23 @@ allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__noti
 
 # Job Search System — User Setup
 
-## Argument modes
+## First step — ask the user what they need
 
-If `$ARGUMENTS` is **"update"**: skip Phases 0–2, jump directly to Phase 6b.
-Runs the deep questionnaire and AI coverage review on an existing profile without recreating the workspace.
+If `$ARGUMENTS` is blank, ask this as the very first message:
 
-If `$ARGUMENTS` is **"verify"**: skip all phases and jump directly to Phase 12 (Workspace Verification).
-Checks every required Notion resource and creates anything missing. Safe to run at any time.
+> "Hi! What would you like to do?
+>
+> 1. **New setup** — I'm setting up for the first time
+> 2. **Check my workspace** — verify everything is set up correctly and fix anything missing
+> 3. **Update my profile** — add to my questionnaire answers or run the AI coverage review
+>
+> Type 1, 2, or 3."
+
+- Answer **1** or "new" → proceed with full setup (Phase 0 onwards)
+- Answer **2** or "verify" → jump directly to Phase 12 (Workspace Verification)
+- Answer **3** or "update" → skip Phases 0–2, jump directly to Phase 6b
+
+If `$ARGUMENTS` is already **"verify"**, **"update"**, or **"new"** — skip the question and use that directly.
 
 ---
 
