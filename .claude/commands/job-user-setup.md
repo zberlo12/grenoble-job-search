@@ -1,15 +1,18 @@
 ---
-description: Guided setup for a new user of the job search system. Creates their entire Notion workspace, fills in their profile through a conversational interview, configures credentials, and schedules the daily scan. Everything is done automatically — the user only answers questions. Can also run in update mode for existing users (type /job-user-setup update). Trigger with /job-user-setup.
-argument-hint: Leave blank for full setup. Pass "update" to run the AI coverage review and questionnaire on an existing profile without recreating the workspace.
+description: Guided setup for a new user of the job search system. Creates their entire Notion workspace, fills in their profile through a conversational interview, configures credentials, and schedules the daily scan. Also runs as a workspace verifier/repair tool — pass "verify" to check all required pages and databases exist and create any that are missing. Trigger with /job-user-setup.
+argument-hint: Leave blank for full setup. Pass "update" to run the AI coverage review and questionnaire. Pass "verify" to check and repair the Notion workspace without re-running setup.
 allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-create-database, mcp__claude_ai_Notion__notion-update-page, Bash, RemoteTrigger
 ---
 
 # Job Search System — User Setup
 
-## Update mode
+## Argument modes
 
-If `$ARGUMENTS` is "update", skip Phases 0–2 and jump directly to Phase 6b.
-This runs the deep questionnaire and AI coverage review on an existing profile without recreating the workspace.
+If `$ARGUMENTS` is **"update"**: skip Phases 0–2, jump directly to Phase 6b.
+Runs the deep questionnaire and AI coverage review on an existing profile without recreating the workspace.
+
+If `$ARGUMENTS` is **"verify"**: skip all phases and jump directly to Phase 12 (Workspace Verification).
+Checks every required Notion resource and creates anything missing. Safe to run at any time.
 
 ---
 
@@ -382,7 +385,10 @@ Show the score and the top 2–3 things that would improve it most.
 
 ## Phase 11 — Finish
 
-Run `/job-dashboard` to verify the Notion connection is working.
+Run Phase 12 (Workspace Verification) first — it confirms everything was created correctly
+and repairs any gaps before giving the final summary.
+
+After Phase 12 completes:
 
 Create a page titled **"Setup Checklist — [First Name]"** under Job Search with:
 - Everything completed automatically (with Notion links)
@@ -404,3 +410,54 @@ Output a final plain-language summary:
 >
 > When you're ready to apply for your first job, type /job-apply.
 > To see all your job listings, type /job-dashboard."
+
+---
+
+## Phase 12 — Workspace Verification & Repair
+
+**This phase runs at the end of every setup AND as a standalone check (`/job-user-setup verify`).**
+
+Search Notion for each required resource by title. For anything missing, create it silently
+and note it in the output. Never overwrite existing items.
+
+**Required pages (search by exact title):**
+
+| Title | Parent | Action if missing |
+|---|---|---|
+| Job Search | workspace root | Create page |
+| ⚙️ User Profile & Config | Job Search | Create blank page with section headings |
+| 📬 Daily Scans | Job Search | Create blank page |
+| Candidate Profile | Job Search | Create blank page |
+| CV Templates | Job Search | Create blank page |
+| Application Documents | Job Search | Create blank page |
+| CL Examples | Application Documents | Create blank page with generic seed content |
+
+**Required databases (search by exact title):**
+
+| Title | Parent | Action if missing |
+|---|---|---|
+| Job Applications | Job Search | Create with full property schema from Phase 2 |
+| Target Companies | Job Search | Create with schema from Phase 2 |
+| Open To-Dos | Job Search | Create with schema from Phase 2 |
+| Networking Contacts | Job Search | Create with schema from Phase 2 / P4 plan |
+
+**After checking all items, output a plain-language report:**
+
+```
+Workspace check complete:
+
+All good:
+- Job Applications database [link]
+- Target Companies database [link]
+- ⚙️ User Profile & Config [link]
+- [etc. for each item that already existed]
+
+Created (were missing):
+- Networking Contacts database — created now [link]
+- [any other items that were missing and just created]
+
+Nothing was deleted or overwritten.
+```
+
+If everything was already in place: "Workspace is complete — all required pages and databases exist."
+If anything was created: "Repaired [N] missing items. Everything is now ready."
