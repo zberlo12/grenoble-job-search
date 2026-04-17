@@ -1,6 +1,6 @@
 ---
-description: Guided setup for a new user of the job search system. Creates their entire Notion workspace, fills in their profile through a conversational interview, configures credentials, and schedules the daily scan. Also runs as a workspace verifier/repair tool — pass "verify" to check all required pages and databases exist and create any that are missing. Trigger with /job-user-setup.
-argument-hint: Leave blank for full setup. Pass "update" to run the AI coverage review and questionnaire. Pass "verify" to check and repair the Notion workspace without re-running setup.
+description: Guided setup for a new user of the job search system. Creates their entire Notion workspace, fills in their profile through a conversational interview, configures credentials, and schedules the daily scan. Also handles adding a second user on the same computer (shared device setup for couples/families). Also runs as a workspace verifier/repair tool — pass "verify" to check all required pages and databases exist and create any that are missing. Trigger with /job-user-setup.
+argument-hint: Leave blank to be asked upfront. Pass "new", "add-user", "verify", or "update" to skip the opening question.
 allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-create-database, mcp__claude_ai_Notion__notion-update-page, Bash, RemoteTrigger
 ---
 
@@ -10,19 +10,91 @@ allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__noti
 
 If `$ARGUMENTS` is blank, ask this as the very first message:
 
-> "Hi! What would you like to do?
+> "Hi! Which of these describes your situation?
 >
-> 1. **New setup** — I'm setting up for the first time
-> 2. **Check my workspace** — verify everything is set up correctly and fix anything missing
-> 3. **Update my profile** — add to my questionnaire answers or run the AI coverage review
+> 1. **I'm setting this up for the first time** — new Claude account, first user on this computer
+> 2. **I'm a second user on this computer** — someone else already has this running (e.g. a partner or family member). I want my own separate job search.
+> 3. **Check my workspace** — verify everything is set up correctly and fix anything missing
+> 4. **Update my profile** — add to my questionnaire answers or run the AI coverage review
 >
-> Type 1, 2, or 3."
+> Type 1, 2, 3, or 4."
 
 - Answer **1** or "new" → proceed with full setup (Phase 0 onwards)
-- Answer **2** or "verify" → jump directly to Phase 12 (Workspace Verification)
-- Answer **3** or "update" → skip Phases 0–2, jump directly to Phase 6b
+- Answer **2** or "add-user" → jump to Phase 0b (additional user path)
+- Answer **3** or "verify" → jump directly to Phase 12 (Workspace Verification)
+- Answer **4** or "update" → skip Phases 0–2, jump directly to Phase 6b
 
-If `$ARGUMENTS` is already **"verify"**, **"update"**, or **"new"** — skip the question and use that directly.
+If `$ARGUMENTS` is already **"verify"**, **"update"**, **"new"**, or **"add-user"** — skip the question and use that directly.
+
+---
+
+## Phase 0b — Additional User Setup
+
+*Only runs when user selects option 2 / "add-user". Skip to Phase 0 for all other paths.*
+
+This path sets up a completely separate job search workspace for a second person on the same
+computer. They share the same Claude login and Notion connection but get their own databases,
+pages, and profile — their data will never mix with the first user's.
+
+### Step 0b-1 — Welcome
+
+Say:
+> "Great! I'll set up your own separate job search workspace alongside the existing one.
+> Your listings, applications, and profile will be completely private from theirs.
+>
+> A few things to know:
+> - You'll share the same Claude login and Notion connection on this computer
+> - Your data will be completely separate — different databases, different pages
+> - To switch between users, just type /job-user-select
+>
+> Let's get started. What's your first name?"
+
+Wait for their name. Save it as `new_user_name` (lowercased, no spaces).
+
+### Step 0b-2 — Find existing credentials
+
+Run via Bash:
+```bash
+ls .env.* 2>/dev/null | grep -v template
+```
+
+This shows existing profiles. Find the active one:
+```bash
+cat .active-profile 2>/dev/null
+```
+
+Read the existing token for reuse:
+```bash
+ACTIVE=$(cat .active-profile 2>/dev/null); grep NOTION_API_TOKEN .env.$ACTIVE 2>/dev/null | cut -d= -f2
+```
+
+Store the token as `existing_token` — it will be written to the new user's `.env` file in Phase 7,
+so they don't need to create their own Notion integration.
+
+### Step 0b-3 — Continue with standard flow (modified)
+
+- **Phase 0** (connect Notion): **SKIP** — Notion is already connected
+- **Phase 1** (welcome): Show a shortened version — "I'll now set up your personal profile."
+- **Phase 2** (create Notion workspace): **Run normally** — creates a brand new separate workspace
+- **Phases 3–6c** (profile questions, CV, tone): **Run normally**
+- **Phase 7** (credentials): **MODIFIED** — instead of asking for a new Notion token, say:
+
+  > "Your workspace was created in the same Notion connection as [active user name].
+  > I'll reuse the same token to connect you — no new integration needed.
+  > Saving your credentials now..."
+
+  Then:
+  - Write `.env.<new_user_name>` with `existing_token` and the new profile page ID from Phase 2
+  - Run `python setup.py --profile <new_user_name>` via Bash
+  - Confirm: "Done — your credentials are saved and the system is pointing to your workspace."
+
+- **Phase 8** (Gmail): Ask first:
+  > "Do you share a Gmail account with the other user on this computer, or do you have your own?
+  > (shared / own)"
+  - If **shared**: "Got it — your daily scan will search the same inbox. Job alerts there will be added to your Notion, not theirs." Skip the Gmail connection steps.
+  - If **own**: Run Phase 8 normally (connect Gmail to Claude, set up label).
+
+- **Phases 9–11**: Run normally (schedule daily scan, AI coverage review, finish).
 
 ---
 

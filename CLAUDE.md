@@ -85,6 +85,17 @@ Skills load this page at runtime (Step 0 in each skill). To adapt the system for
 2. Update `notion_config_page_id` in `.mcp.json` to the new page's ID
 3. Update the ID above in this file
 
+## Multi-User Support
+
+Multiple people can use this system on the same computer without swapping Claude accounts.
+Each user gets their own Notion workspace (separate databases and pages) and their own
+`.env.<name>` credentials file.
+
+- `/job-user-setup` → choose option 2 to add a second user on this machine
+- `/job-user-select` → switch the active profile at any time
+
+The second user reuses the existing Notion connection and token — no new integration needed.
+
 ## Notion Database Schema
 
 **Job Applications**: Job Title (title), Company, Source (select), Location, Salary, Priority (A/B/C select), CV Approach (select), Status (select: To Assess/To Apply/Applied/Interview/Offer/Rejected/On Hold), Date Added, Date Applied, Date Response, Job URL, Gmail Thread URL, Red Flags (multi-select), Notes (rich text), English (checkbox)

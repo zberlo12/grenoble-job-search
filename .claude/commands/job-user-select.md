@@ -42,3 +42,4 @@ If it fails (missing .env file or unfilled values), explain in plain language:
 - Switching profiles regenerates `.mcp.json` immediately — takes effect on the next Notion tool call.
 - Each profile has its own `.env.<name>` file with a separate Notion token and profile page ID.
 - To create a new profile from scratch, run `/job-user-setup`.
+- To add a second user on this computer (e.g. a partner), run `/job-user-setup` and choose option 2 ("I'm a second user on this computer").
