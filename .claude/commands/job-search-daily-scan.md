@@ -335,9 +335,10 @@ Call `mcp__claude_ai_Notion__notion-update-page` with `command: "insert_content_
 ```markdown
 ## Job Alert Scan — [DATE]
 
-📊 **[N] listings found in emails  ·  [N] pursued  ·  [N] dismissed  ·  [N] duplicates skipped**
+📊 **[N] new listings today  ·  [N] pursued  ·  [N] dismissed**
+*(+[N] duplicates already in Notion — not counted in today's totals)*
 
-**New listings written:** [N]  ·  **Queued for review:** [N]  ·  **Already in Notion:** [N]
+**Written to Notion:** [N]  ·  **Queued for review:** [N]
 
 ### By Priority
 - 🟢 A: [N] — [titles if any]
