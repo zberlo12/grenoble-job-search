@@ -59,6 +59,15 @@ Create all pages/databases in this order (all silently, no progress messages unt
 4. Create a sub-page titled **"Candidate Profile"** under Job Search
 5. Create a sub-page titled **"CV Templates"** under Job Search
 6. Create a sub-page titled **"Application Documents"** under Job Search
+   After creating Application Documents, also create a sub-page titled **"CL Examples"** under it.
+   Pre-seed the CL Examples page with a generic structural placeholder (call notion-update-page):
+   > Generic CL Structure — Starting Template
+   > [Opening] I am applying for the [role] at [Company]. With [X years] in [function], I offer [value].
+   > [Body 1] At [Employer], I [achievement with metric] — directly relevant to [JD requirement].
+   > [Body 2] Beyond [core skill], I bring [adjacent skill].
+   > [Closing] I would welcome the chance to discuss this further.
+   > NOTE: Replace this with your own cover letter after your first real application.
+   This ensures /job-apply always has something to reference even before the user has any real CLs.
 7. Create a database titled **"Job Applications"** under Job Search with these properties:
    - Job Title (title), Company (text), Source (select: Indeed/LinkedIn/Direct/Referral/Other),
      Location (text), Salary (text), Priority (select: A/B/C), CV Approach (select: Standard/FP&A Focus/Cost Control Focus/Transformation Focus),
@@ -162,6 +171,12 @@ If CV pasted:
 - Show a summary: "Based on your CV, here's what I've added to your profile: [list]"
 - Ask: "Does anything look wrong or missing?"
 
+Also ask after CV is saved:
+> "Do you have a cover letter from a previous application that you were happy with?
+> Paste it here and I'll use it to match your writing style going forward. (Or type 'skip')"
+If pasted: save as a new page titled "My CL Example — [date]" under the CL Examples page.
+This replaces the generic placeholder as the style reference for all future cover letters.
+
 ---
 
 ## Phase 6b — Deep profile questionnaire
@@ -182,6 +197,54 @@ These capture things a CV doesn't show. Skip any already answered by the CV.
 **"Any upcoming time constraints I should know about — like a notice period, planned holidays, family commitments?"**
 
 Save each answer to the Candidate Profile page as structured talking points under a "CL Context" section.
+
+---
+
+## Phase 6c — Writing Tone Profile
+
+Tell the user:
+> "Five quick exercises to capture your natural writing style — this helps me write cover letters
+> that sound like you, not like a template. Takes about 3 minutes."
+
+**Exercise 1:**
+> "How would you describe your professional personality in 3 words?"
+Save to Candidate Profile: `Tone: Self-description = [answer]`
+
+**Exercise 2:**
+> "Rewrite this sentence in your own natural style:
+> 'I am applying for the Finance Manager position at Acme Corp and believe my experience
+> makes me an excellent candidate.'"
+Analyse: formal vs. conversational, confident vs. modest, sentence length.
+Save: `Tone: Rewrite sample = [their version] | Analysis = [formal/conversational, direct/modest]`
+
+**Exercise 3:**
+> "Which of these two closing lines feels more like you?
+> A) 'I look forward to the opportunity to discuss my application further.'
+> B) 'I'd be glad to chat further about how I can contribute to your team.'
+> Or describe your own preferred closing."
+Save: `Tone: Style preference = [A/B/own version]`
+
+**Exercise 4:**
+> "Describe one professional achievement you're proud of — 2–3 sentences, the way you'd explain
+> it to a smart friend (not the formal CV version)."
+Analyse: active/passive voice, use of I vs. we, specific vs. vague, numerical vs. descriptive.
+Save: `Tone: Natural achievement = [their text] | Voice = [analysis]`
+
+**Exercise 5:**
+> "Is there anything about some cover letters that you find cringeworthy or off-putting?
+> (e.g. too formal, too salesy, buzzwords, sounds desperate)"
+Save: `Tone: Avoid = [answer]`
+
+After all 5, save a compiled **"Writing Tone Profile"** section to the Candidate Profile page:
+- Formality: Formal / Semi-formal / Conversational (derived)
+- Confidence: Direct / Measured / Modest (derived)
+- Sentence preference: Short / Medium / Long (derived)
+- Voice: First-person active / mixed (derived)
+- Avoid: [stated red lines]
+- Sample phrase: [Exercise 2 rewrite]
+
+If the user skips this phase: note "Tone profile not set — neutral register will be used until
+a real cover letter example is saved after the first application."
 
 ---
 

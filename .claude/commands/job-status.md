@@ -105,6 +105,36 @@ After processing pre-fills, ask once:
 
 Valid status keywords: `interview`, `rejected`, `offer`, `hold`, `applied [date]`.
 
+### 4D — Offer handling (runs when any row is updated to "Offer")
+
+When a row moves to Offer status (via auto-detection or manual entry):
+
+Ask:
+> "Congratulations! What are the offer details?
+>   - Base salary:
+>   - Any bonus, variable pay, or other components:
+>   (Type 'skip' to just record the status change)"
+
+If details provided:
+1. Compare to the salary floor from profile Section 2. Flag if below:
+   "⚠️ This offer is below your stated floor of [€X]."
+
+2. Fetch market benchmarks via WebFetch (try in order until one returns data):
+   - `apec.fr/candidat/les-etudes-apec/les-salaires-des-cadres.html`
+   - Glassdoor France search for `[role] [location]`
+   - PayScale France
+   Extract the typical salary range for this role type and location.
+
+3. Generate a negotiation brief and append to the Notion row Notes:
+   ```
+   Offer received [date]: [stated salary]
+   Market range for [role] in [location]: approx [X]–[Y]
+   Assessment: [above/at/below] market
+   [If below: Suggested counter: [Y+5%]. Opening line:]
+   "Thank you for the offer. Given my [key experience] and current market rates for this level,
+   I was expecting something closer to [target]. Is there flexibility?"
+   ```
+
 ---
 
 ## Step 5 — Apply All Updates

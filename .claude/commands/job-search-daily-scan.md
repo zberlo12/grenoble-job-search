@@ -159,14 +159,27 @@ For each listing, extract:
 
 Database ID: from profile Section 7 (Job Applications DB)
 
+**Pre-dedup title normalisation:**
+Before searching, expand known abbreviations in both the extracted title and the search string:
+- RAF ↔ Responsable Administratif Financier
+- DAF ↔ Directeur Administratif Financier
+- CDG ↔ Contrôleur de Gestion
+- FBP ↔ Finance Business Partner
+Search for both the original and expanded forms if the title contains one of these.
+
+**Standard dedup check:**
 For each extracted listing that was not already discarded by Gmail pre-screening (Step 2), call `mcp__claude_ai_Notion__notion-search` with a **30-day `created_date_range` filter** (start: today minus 30 days):
 
 - If a Job URL exists, search for it — if any result's URL or `jk=` job ID matches, skip this listing.
-- If no URL, search `"[Company] [Job Title]"` — if a match is found within the last 30 days, skip.
+- If no URL, search `"[Company] [Normalised Title]"` — if a match is found within the last 30 days, skip.
 
-The 30-day window is safe: same company posting a *different* role within 30 days will not be caught because the search includes the job title. Only the exact same company+title combination within 30 days is treated as a duplicate.
+**Fuzzy check (runs only if standard check passes):**
+Also search `"[Company]"` alone within the last 30 days.
+For each result: if the result's title normalises to the same root as the new listing's title → flag as "Possible duplicate" in the digest rather than writing a new row. Do not silently skip — surface it for manual review.
 
-Only process listings that are not already in Notion.
+The 30-day window is safe: same company posting a *different* role within 30 days will not be caught because the search includes the job title.
+
+Only process listings that pass both checks.
 
 ---
 

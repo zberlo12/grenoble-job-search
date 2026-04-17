@@ -91,12 +91,21 @@ Total: 3 API calls. Run all in parallel.
 
 Database ID: from profile Section 7 (Job Applications DB)
 
+**Pre-dedup title normalisation:**
+Before searching, expand known abbreviations in both the extracted title and the search string:
+- RAF ↔ Responsable Administratif Financier
+- DAF ↔ Directeur Administratif Financier
+- CDG ↔ Contrôleur de Gestion
+- FBP ↔ Finance Business Partner
+Search for both the original and expanded forms if the title contains one of these.
+
 Collect all results from Steps 2A/2B. Deduplicate across searches first (same job ID = one entry). Then for each unique listing:
 
 - If job ID (`jk=` extracted from URL) matches a Notion entry created in the last 30 days → discard.
-- If no URL match, call `mcp__claude_ai_Notion__notion-search` for `"[Company] [Job Title]"` within the last 30 days → discard if found.
+- If no URL match, call `mcp__claude_ai_Notion__notion-search` for `"[Company] [Normalised Title]"` within the last 30 days → discard if found.
+- Fuzzy check: also search `"[Company]"` alone. If a result's title normalises to the same root as the new listing → flag as "Possible duplicate — manual check" in the summary rather than writing a new row.
 
-Only listings that survive proceed to Step 4.
+Only listings that pass all checks proceed to Step 4.
 
 ---
 
