@@ -451,23 +451,45 @@ and note it in the output. Never overwrite existing items.
 | Open To-Dos | Job Search | Create with schema from Phase 2 |
 | Networking Contacts | Job Search | Create with schema from Phase 2 / P4 plan |
 
-**After checking all items, output a plain-language report:**
+**After checking all Notion items, check local credentials:**
+
+Run these Bash checks sequentially:
+
+1. `cat .active-profile 2>/dev/null || echo "MISSING"`
+   - If MISSING: credentials not configured — note this in the report.
+
+2. If a profile name was found (e.g. "zack"):
+   `test -f .env.zack && echo "EXISTS" || echo "MISSING"`
+   - If MISSING: the `.env.<name>` file doesn't exist — note this in the report. Cannot auto-create (needs user's Notion token).
+
+3. `python -c "import json; d=json.load(open('.mcp.json')); print('OK') if d.get('notion_config_page_id') and d['mcpServers']['notion']['env'].get('NOTION_API_TOKEN') else print('INCOMPLETE')" 2>/dev/null || echo "MISSING"`
+   - If MISSING or INCOMPLETE: `.mcp.json` is absent or lacks required fields.
+   - If the `.env.<name>` file exists but `.mcp.json` is wrong: run `python setup.py --profile <name>` to regenerate it automatically. Report the result.
+
+**Output the full report:**
 
 ```
 Workspace check complete:
 
-All good:
-- Job Applications database [link]
-- Target Companies database [link]
-- ⚙️ User Profile & Config [link]
-- [etc. for each item that already existed]
+Notion resources:
+✓ Job Applications database [link]
+✓ Target Companies database [link]
+✓ ⚙️ User Profile & Config [link]
+[etc.]
++ Networking Contacts database — created [link]    ← only if created
 
-Created (were missing):
-- Networking Contacts database — created now [link]
-- [any other items that were missing and just created]
+Local credentials:
+✓ Active profile: zack
+✓ .env.zack exists
+✓ .mcp.json is valid
+
+[OR if something was wrong:]
+✗ .mcp.json was outdated — regenerated from .env.zack
+✗ .env.zack not found — to fix, copy .env.template to .env.zack and fill in your Notion token and profile page ID, then run: python setup.py --profile zack
 
 Nothing was deleted or overwritten.
 ```
 
-If everything was already in place: "Workspace is complete — all required pages and databases exist."
-If anything was created: "Repaired [N] missing items. Everything is now ready."
+If everything is in order: "Workspace and credentials are fully set up."
+If repairs were made: "Repaired [N] items. Everything is now ready."
+If the `.env` file is missing: explain exactly what the user needs to do — never fail silently.
