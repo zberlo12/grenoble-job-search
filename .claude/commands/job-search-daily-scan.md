@@ -59,6 +59,17 @@ When a source filter is active, skip the other Gmail searches entirely for that 
 
 Today's date comes from the injected `currentDate` context — use it to compute "yesterday" and to bound the catch-up range. Never scan today itself; alert emails for today are still arriving.
 
+**Automatic catch-up check (runs when $ARGUMENTS is empty):**
+
+If no arguments were given (default daily run), before starting the scan:
+1. Fetch the Daily Scans archive page (ID from profile Section 7)
+2. Find the most recent `## Job Alert Scan — YYYY-MM-DD` heading in the page content
+3. Parse that date and compute gap = yesterday − most-recent-scan-date in days
+4. If gap > 1: automatically expand the scan range from (most-recent-scan-date + 1 day) through yesterday.
+   Add a note at the top of each digest section: "⚠️ Catch-up scan (missed [N] days)"
+5. If gap = 1 or 0: normal single-day scan (yesterday only)
+6. If no entries exist yet in the archive: scan yesterday only (first run)
+
 **Run Steps 2 through 7 once per date in the resolved list**, in chronological order. Each date gets its own Gmail/Indeed sweep, its own dedup pass against Notion, and its own dated section in the Daily Scans archive. Do not merge days into one digest — the archive stays cleaner with one section per day, and `/job-review` queue additions remain traceable to a specific day.
 
 For each scan date, search for emails received between 00:00 and 23:59 on that date.
@@ -82,6 +93,18 @@ from:offres@diffusion.apec.fr after:YYYY/MM/DD before:YYYY/MM/DD
 APEC emails arrive daily from `offres@diffusion.apec.fr` and are now labelled "jobs" (Gmail filter in place). They are also caught by Search 1, so this search is redundant — but kept as an explicit safety net.
 
 > **APEC content limitation**: APEC emails are HTML-only with no plain-text fallback. `get_thread` returns no body content. Do NOT attempt to call `get_thread` on APEC threads — it will return nothing useful. Instead, when an APEC thread is found: read the subject line for the total count (e.g. "17 offres Apec du 14/04/2026") and the snippet for the matching count ("N offres correspondent à votre recherche"), log both in the daily digest under a **"APEC — manual check required"** section, and skip to the next thread. The actual listings must be checked by logging into apec.fr directly.
+
+> **Cadremploi HTML-only handling — three-rung ladder:**
+> Cadremploi emails often have no plain-text body. When a Cadremploi thread returns no `plaintextBody`:
+>
+> **Rung 1 — Snippet parsing (always try first):**
+> Parse the Gmail snippet for a company name (e.g. "Postulez chez Acme" → company = Acme) and the subject for listing count ("1 offre à ne rater" → single listing). If company + single-listing signal found: construct a minimal listing entry (title from alert keyword, company from snippet) and proceed to dedup. If a `cadremploi.fr` URL appears in the snippet: proceed to Rung 2.
+>
+> **Rung 2 — WebFetch on listing URL:**
+> If a `cadremploi.fr/emploi/...` URL is found, call WebFetch: "Extract job title, company, location, salary, contract type, seniority, hybrid/remote policy." If it succeeds: use extracted data. If blocked or empty: proceed to Rung 3.
+>
+> **Rung 3 — Manual check fallback:**
+> Log under "Cadremploi — manual check needed" in the digest with the Gmail thread link and snippet. (OpenClaw browser rendering will replace this rung once OpenClaw MCP is configured.)
 
 **Search 3 — Recruiter/direct outreach (not labelled):**
 ```
@@ -260,6 +283,19 @@ Do NOT alert Zack for auto-expiries — just log them in the digest.
 - `Notes` → append `" | [Status] detected by daily scan [date]"`
 
 **Silent if nothing found** — only include in the digest if there are actual updates.
+
+**Follow-up nudge (runs after response check):**
+
+For each `Applied` row where:
+- Date Applied is between 14 and 45 days ago
+- No response found in Gmail during this check
+- Notes field does NOT contain "follow-up sent" or "relance" (case-insensitive)
+
+Add to the digest under a **"Consider Following Up"** section:
+- "[Title] @ [Company] — applied [N] days ago, no response detected"
+
+Do NOT change Status or Notes. Only show this section if at least one row qualifies.
+Do NOT include rows already auto-expired (>60 days).
 
 ---
 
