@@ -48,15 +48,17 @@ After creating the DB, write its ID back to Section 7 of the User Profile & Conf
 
 ## Step 1 — Menu
 
+**Language note:** All interaction with Zack (menus, prompts, questions, confirmations) is in English. French is used only in the output content — report entries, email body, and the 💬 commentaire FT copy-paste text.
+
 If `$ARGUMENTS` is blank, ask the user to choose a mode:
 
 ```
-France Travail Log — que souhaitez-vous faire ?
+France Travail Log — what would you like to do?
 
-1. Synchroniser  — importer depuis Job Applications + Réseau
-2. Ajouter       — saisir une action manuelle
-3. Rapport       — afficher le journal pour une période
-4. Tout          — synchroniser puis afficher le rapport
+1. Sync    — import from Job Applications + Networking DBs
+2. Add     — log a manual entry
+3. Report  — view and triage entries for a period
+4. All     — sync then show report
 ```
 
 Map responses to modes: `sync`, `add`, `report`, or run sync then report.
@@ -196,14 +198,14 @@ Fetch matching FT Log entries filtered by Date, Priorité, and Statut déclarati
 Before generating the report, check each `À déclarer` entry against the required fields for its category (see **France Travail portal fields** section below). If any required fields are missing, prompt Zack to fill them in before continuing — do this in batch, one entry at a time:
 
 ```
-Il manque des informations pour 2 entrées :
+Missing info for 2 entries:
 
 [1/2] Candidature — Finance Director @ Schneider Electric (2026-04-10)
-  Champ manquant : Site utilisé
-  → Indeed / LinkedIn / Site entreprise / Email direct / APEC / Autre ?
+  Missing: Website / channel used
+  → Indeed / LinkedIn / Company site / Direct email / APEC / Other?
 
 [2/2] Candidature — FP&A Manager @ STMicroelectronics (2026-04-08)
-  Champ manquant : Site utilisé
+  Missing: Website / channel used
   → ?
 ```
 
@@ -264,20 +266,20 @@ For each entry show a compact summary and three options:
 #1  2026-04-08  Candidature — Finance Director @ Schneider Electric
     💬 Candidature au poste de Finance Director chez Schneider Electric via Indeed.
 
-  [R] Reporter cette semaine   → inclure dans l'email
-  [D] Décider plus tard        → laisser À déclarer pour la prochaine fois
-  [X] Ne pas déclarer          → marquer Exclu (conservé en cas de contrôle)
+  [R] Report this week    → include in the email
+  [D] Decide later        → leave as À déclarer for next time
+  [X] Don't report        → mark Exclu (kept in log for audit)
 ```
 
 Collect decisions for all entries before writing anything to Notion. After the last entry, show a confirmation summary:
 
 ```
-Récapitulatif de vos décisions :
-  À reporter  : X actions (incluses dans l'email)
-  À décider   : Y actions (laissées À déclarer)
-  Exclues     : Z actions (conservées pour audit)
+Summary of your decisions:
+  To report  : X actions (will go in the email)
+  Decide later : Y actions (left as À déclarer)
+  Excluded   : Z actions (kept for audit backup)
 
-Confirmer et créer le brouillon email ? [O/N]
+Confirm and create email draft? [Y/N]
 ```
 
 On confirmation:
@@ -323,10 +325,10 @@ Confirm draft created.
 After the email draft is created, offer:
 
 ```
-Options :
-  M — Marquer les actions reportées comme Déclaré  (après les avoir saisis dans FT)
-  A — Ajouter une action manuelle
-  Q — Quitter
+Options:
+  M — Mark reported actions as Déclaré  (after entering them in France Travail)
+  A — Add a manual entry
+  Q — Quit
 ```
 
 If **M**: update all entries that were marked R in the triage to `Déclaré` in Notion. Confirm count.
