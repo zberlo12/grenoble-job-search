@@ -34,7 +34,13 @@ Create the France Travail Log database as a child of the job search root page wi
 - **Poste · Sujet** (rich_text)
 - **Mode** (select): Email / Téléphone / Visio / Présentiel / En ligne / Courrier
 - **Source** (select): Auto-Candidatures / Auto-Réseau / Manuel
+- **Statut déclaration** (select): À déclarer / Déclaré / Exclu
 - **Notes** (rich_text)
+
+**Statut déclaration values:**
+- `À déclarer` — logged but not yet entered into France Travail (default for all new entries)
+- `Déclaré` — confirmed entered into France Travail portal/declaration
+- `Exclu` — deliberately not reported (e.g. optionnel actions Zack chose to skip), but kept in full history for audit backup
 
 After creating the DB, write its ID back to Section 7 of the User Profile & Config page under the label `france_travail_log_db_id`. Confirm to the user that the database has been initialised.
 
@@ -90,6 +96,8 @@ Fetch all rows from `networking_contacts_db_id`. For each row with a Last Contac
 - Date: Last Contact date
 - Source: Auto-Réseau
 
+All new entries created by sync default to **Statut déclaration = À déclarer**.
+
 ### Deduplication
 
 Before creating each entry, search the FT Log for an existing entry where:
@@ -136,6 +144,9 @@ Prompt the user in order (accept any format for date):
 4. **Poste / Sujet** (role title, course name, event name, etc.)
 5. **Mode de contact** (Email / Téléphone / Visio / Présentiel / En ligne / Courrier)
 6. **Notes** (optional — press Enter to skip)
+7. **Déclarer à France Travail ?** — suggest based on Priorité:
+   - If Obligatoire or Impactant: suggest `À déclarer`
+   - If Optionnel: suggest `Exclu` but let Zack override to `À déclarer`
 
 Auto-assign Priorité based on the category chosen (see mapping above).
 Auto-generate the Action title: `[Catégorie] — [Poste/Sujet] @ [Entreprise]` (omit @ part if no Entreprise).
@@ -144,11 +155,12 @@ Source: Manuel.
 Confirm before creating:
 ```
 Créer cette entrée ?
-  Date :       2026-04-15
-  Catégorie :  Formation  (Optionnel)
-  Entreprise : Coursera
-  Sujet :      Financial Modelling in Excel
-  Mode :       En ligne
+  Date :              2026-04-15
+  Catégorie :         Formation  (Optionnel)
+  Entreprise :        Coursera
+  Sujet :             Financial Modelling in Excel
+  Mode :              En ligne
+  Statut décl. :      Exclu
 [O/N]
 ```
 
@@ -158,7 +170,7 @@ Create the entry and confirm with the Notion page URL.
 
 ## Step 2c — Report mode
 
-Ask the user two questions:
+Ask the user three questions:
 
 **Période :**
 1. Ce mois-ci ([current month])
@@ -171,7 +183,13 @@ Ask the user two questions:
 2. Obligatoire + Impactant — adds réseau, suivis, événements, FT meetings
 3. Tout — complete log including formations, CV updates, admin
 
-Fetch matching FT Log entries filtered by Date and Priorité. Sort by Date descending.
+**Statut déclaration :**
+1. À déclarer seulement — show what still needs to be entered into France Travail (default, most useful before a monthly declaration)
+2. Déclaré seulement — show what has already been reported
+3. Tout sauf Exclu — full history minus deliberately excluded entries
+4. Tout — complete log including Exclu entries (audit view)
+
+Fetch matching FT Log entries filtered by Date, Priorité, and Statut déclaration. Sort by Date ascending (chronological, easiest to enter sequentially into France Travail portal).
 
 Output format:
 
@@ -179,37 +197,44 @@ Output format:
 ═══════════════════════════════════════════════════
 FRANCE TRAVAIL — Rapport [Mois Année / Période]
 Profondeur : [Obligatoire / Obligatoire + Impactant / Tout]
+Statut :     [À déclarer / Déclaré / Tout sauf Exclu / Tout]
 ═══════════════════════════════════════════════════
 
 RÉSUMÉ PAR CATÉGORIE
 ─────────────────────
-Candidatures :        X
-Entretiens :          X
+Candidatures :        X  (X à déclarer, X déjà déclaré)
+Entretiens :          X  (X à déclarer, X déjà déclaré)
 Contacts recruteur :  X
 Contacts réseau :     X
-Suivis :              X
 Formations :          X
 Autres :              X
 ─────────────────────
-TOTAL :               X actions
+TOTAL :               X actions  (X à déclarer)
 
 JOURNAL CHRONOLOGIQUE
 ─────────────────────
-[YYYY-MM-DD]  Candidature      Schneider Electric     Finance Director      Email
-[YYYY-MM-DD]  Entretien        Raydiall               Finance Director      Téléphone
-[YYYY-MM-DD]  Contact réseau   Alice Ferra            Raydiall              Présentiel
+[YYYY-MM-DD]  Candidature      Schneider Electric     Finance Director      Email        [À déclarer]
+[YYYY-MM-DD]  Entretien        Raydiall               Finance Director      Téléphone    [À déclarer]
+[YYYY-MM-DD]  Contact réseau   Alice Ferra            Raydiall              Présentiel   [Déclaré]
 ...
 ```
 
 If zero entries match, say so and suggest running a sync first.
 
-After displaying the report, offer:
+**After displaying the report**, if any entries are shown with statut `À déclarer`, offer:
+
 ```
 Options :
+  M — Marquer tout comme Déclaré  (une fois que vous les avez saisis dans France Travail)
+  E — Exclure certaines entrées   (marquer comme Exclu par numéro de ligne)
   A — Ajouter une action manuelle
   S — Synchroniser depuis les bases de données
   Q — Quitter
 ```
+
+If the user chooses **M**: update all displayed `À déclarer` entries to `Déclaré` in Notion. Confirm count updated.
+
+If the user chooses **E**: ask which line numbers to exclude (e.g. "3, 7"), update those entries to `Exclu` in Notion. Confirm, then re-offer the menu.
 
 ---
 
