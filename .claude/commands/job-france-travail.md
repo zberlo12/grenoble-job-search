@@ -79,9 +79,10 @@ Fetch all rows from `job_applications_db_id`. For each row, apply this mapping:
 |---|---|---|---|---|
 | Docs Ready | Candidature | Candidature | Obligatoire | Date Applied (or Date Added if blank) |
 | Applied | Candidature | Candidature | Obligatoire | Date Applied |
-| Interview | Entretien | Entretien | Obligatoire | Date Response |
-| Offer | Offre reçue | Entretien | Obligatoire | Date Response |
-| Rejected (after Applied) | — | — | — | Skip — application is already logged |
+| Interview | Candidature + Entretien | Candidature / Entretien | Obligatoire | Candidature: Date Applied — Entretien: Date Response (or best date from Notes) |
+| Offer | Candidature + Entretien | Candidature / Entretien | Obligatoire | Candidature: Date Applied — Entretien: Date Response |
+| Rejected (Date Applied set) | Candidature | Candidature | Obligatoire | Date Applied — these are real submissions and count as job search actions |
+| Rejected (no Date Applied) | — | — | — | Skip — never submitted |
 
 Action title format: `Candidature — [Job Title] @ [Company]` or `Entretien — [Job Title] @ [Company]`
 
