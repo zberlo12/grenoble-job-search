@@ -178,18 +178,35 @@ Before searching, expand known abbreviations in both the extracted title and the
 Search for both the original and expanded forms if the title contains one of these.
 
 **Standard dedup check:**
-For each extracted listing that was not already discarded by Gmail pre-screening (Step 2), call `mcp__claude_ai_Notion__notion-search` with a **30-day `created_date_range` filter** (start: today minus 30 days):
+For each extracted listing, call `mcp__claude_ai_Notion__notion-search` with:
+- `query`: `"[Company] [Normalised Title]"`
+- `data_source_url`: `collection://[Job Applications data source ID from profile Section 7]`
+- `filters`: `created_date_range` start = today minus 30 days
 
-- If a Job URL exists, search for it — if any result's URL or `jk=` job ID matches, skip this listing.
-- If no URL, search `"[Company] [Normalised Title]"` — if a match is found within the last 30 days, skip.
+This searches **within the Job Applications database only** — far more reliable than a workspace-wide URL search.
 
-**Fuzzy check (runs only if standard check passes):**
-Also search `"[Company]"` alone within the last 30 days.
-For each result: if the result's title normalises to the same root as the new listing's title → flag as "Possible duplicate" in the digest rather than writing a new row. Do not silently skip — surface it for manual review.
+For each result returned:
+1. Check if **Company** matches the new listing's company (case-insensitive, partial match ok)
+   AND **Job Title** normalises to the same root as the new listing's title.
+2. If both match → **duplicate**. Skip. Log as duplicate in digest.
+3. If only company matches but title clearly differs → different role, not a duplicate. Proceed.
 
-The 30-day window is safe: same company posting a *different* role within 30 days will not be caught because the search includes the job title.
+If no results returned → proceed to write (genuinely new).
 
-Only process listings that pass both checks.
+**URL confirmation (second pass — only when company matches but title is ambiguous):**
+Extract the job ID from both URLs:
+- Indeed: `jk=` value (strip leading zeros before comparing)
+- LinkedIn: numeric job ID from `linkedin.com/jobs/view/[ID]/`
+If job IDs match → duplicate. Skip.
+
+**Catch-up overlap warning:**
+When $ARGUMENTS contains a date range (catch-up mode), before processing each date
+search the Daily Scans archive page for a heading `## Job Alert Scan — [YYYY-MM-DD]`.
+If found → the trigger already scanned that date. Prepend to that day's digest:
+`⚠️ This date was already scanned by the trigger — check Notion for any duplicates.`
+Do not skip the date; flag it clearly so manual review is easy.
+
+Only process listings that pass the dedup check.
 
 ---
 
