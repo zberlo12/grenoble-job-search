@@ -1,7 +1,7 @@
 ---
 description: Log and report job search actions for France Travail compliance. Auto-syncs from Job Applications and Networking DBs, allows manual entries, and generates audit-ready reports tiered by reporting priority. Trigger with /job-france-travail or when Zack wants to log or review actions for France Travail / Pôle Emploi.
 argument-hint: "add | sync | report | blank for interactive menu"
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-create-database, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread
+allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-create-database, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Gmail__create_draft
 ---
 
 ## Purpose
@@ -189,7 +189,29 @@ Ask the user three questions:
 3. Tout sauf Exclu — full history minus deliberately excluded entries
 4. Tout — complete log including Exclu entries (audit view)
 
-Fetch matching FT Log entries filtered by Date, Priorité, and Statut déclaration. Sort by Date ascending (chronological, easiest to enter sequentially into France Travail portal).
+Fetch matching FT Log entries filtered by Date, Priorité, and Statut déclaration. Sort by Date ascending (chronological — easiest to enter sequentially into France Travail portal).
+
+### Step 2c-i — Check for missing France Travail fields
+
+Before generating the report, check each `À déclarer` entry against the required fields for its category (see **France Travail portal fields** section below). If any required fields are missing, prompt Zack to fill them in before continuing — do this in batch, one entry at a time:
+
+```
+Il manque des informations pour 2 entrées :
+
+[1/2] Candidature — Finance Director @ Schneider Electric (2026-04-10)
+  Champ manquant : Site utilisé
+  → Indeed / LinkedIn / Site entreprise / Email direct / APEC / Autre ?
+
+[2/2] Candidature — FP&A Manager @ STMicroelectronics (2026-04-08)
+  Champ manquant : Site utilisé
+  → ?
+```
+
+Save the answers to the Notes field of each entry (prefix: `FT: `).
+
+### Step 2c-ii — Generate report with French comments
+
+For each entry, generate a **commentaire FT** — a concise French phrase (≤200 characters) ready to paste into the France Travail portal comment field. Use the templates in the **France Travail portal fields** section below.
 
 Output format:
 
@@ -211,30 +233,103 @@ Autres :              X
 ─────────────────────
 TOTAL :               X actions  (X à déclarer)
 
-JOURNAL CHRONOLOGIQUE
-─────────────────────
-[YYYY-MM-DD]  Candidature      Schneider Electric     Finance Director      Email        [À déclarer]
-[YYYY-MM-DD]  Entretien        Raydiall               Finance Director      Téléphone    [À déclarer]
-[YYYY-MM-DD]  Contact réseau   Alice Ferra            Raydiall              Présentiel   [Déclaré]
+ACTIONS À DÉCLARER
+───────────────────
+#1  2026-04-08  Candidature
+    Schneider Electric — Finance Director
+    Site : Indeed
+    💬 Candidature au poste de Finance Director chez Schneider Electric via Indeed.
+
+#2  2026-04-10  Entretien
+    Raydiall — Finance Director
+    Mode : Téléphone
+    💬 Entretien téléphonique pour le poste de Finance Director chez Raydiall.
+
+#3  2026-04-14  Contact réseau
+    Alice Ferra — Raydiall
+    Mode : Présentiel
+    💬 Échange avec Alice Ferra (Raydiall) au sujet des opportunités finance.
 ...
 ```
 
 If zero entries match, say so and suggest running a sync first.
 
-**After displaying the report**, if any entries are shown with statut `À déclarer`, offer:
+### Step 2c-iii — Per-line triage
+
+After displaying the full list, go through each `À déclarer` entry **one at a time** and ask Zack what to do with it. This is the core decision step — he decides right now, delays to next run, or permanently skips.
+
+For each entry show a compact summary and three options:
+
+```
+#1  2026-04-08  Candidature — Finance Director @ Schneider Electric
+    💬 Candidature au poste de Finance Director chez Schneider Electric via Indeed.
+
+  [R] Reporter cette semaine   → inclure dans l'email
+  [D] Décider plus tard        → laisser À déclarer pour la prochaine fois
+  [X] Ne pas déclarer          → marquer Exclu (conservé en cas de contrôle)
+```
+
+Collect decisions for all entries before writing anything to Notion. After the last entry, show a confirmation summary:
+
+```
+Récapitulatif de vos décisions :
+  À reporter  : X actions (incluses dans l'email)
+  À décider   : Y actions (laissées À déclarer)
+  Exclues     : Z actions (conservées pour audit)
+
+Confirmer et créer le brouillon email ? [O/N]
+```
+
+On confirmation:
+1. Update Notion: set `Exclu` on all entries marked X (leave D entries unchanged)
+2. Draft the email (do NOT mark R entries as `Déclaré` yet — Zack marks them Déclaré after actually entering them into France Travail)
+
+### Step 2c-iv — Create Gmail draft
+
+Create a Gmail draft to `zberlo12@gmail.com`:
+
+- **Subject:** `France Travail — À déclarer [Mois Année]`
+- **Body** (plain text):
+
+```
+France Travail — Actions à déclarer
+Période : [Mois Année]
+Généré le : [today's date]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+#1  08/04/2026  —  Candidature
+    Entreprise : Schneider Electric
+    Poste :      Finance Director
+    Site :       Indeed
+    ▶ Candidature au poste de Finance Director chez Schneider Electric via Indeed.
+
+#2  10/04/2026  —  Entretien
+    Entreprise : Raydiall
+    Poste :      Finance Director
+    Mode :       Téléphonique
+    ▶ Entretien téléphonique pour le poste de Finance Director chez Raydiall.
+
+[... all R entries ...]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total : X actions à saisir dans France Travail
+Une fois saisi, relancer /job-france-travail → Rapport → Marquer comme Déclaré
+```
+
+Confirm draft created.
+
+### Step 2c-v — Final offer
+
+After the email draft is created, offer:
 
 ```
 Options :
-  M — Marquer tout comme Déclaré  (une fois que vous les avez saisis dans France Travail)
-  E — Exclure certaines entrées   (marquer comme Exclu par numéro de ligne)
+  M — Marquer les actions reportées comme Déclaré  (après les avoir saisis dans FT)
   A — Ajouter une action manuelle
-  S — Synchroniser depuis les bases de données
   Q — Quitter
 ```
 
-If the user chooses **M**: update all displayed `À déclarer` entries to `Déclaré` in Notion. Confirm count updated.
-
-If the user chooses **E**: ask which line numbers to exclude (e.g. "3, 7"), update those entries to `Exclu` in Notion. Confirm, then re-offer the menu.
+If **M**: update all entries that were marked R in the triage to `Déclaré` in Notion. Confirm count.
 
 ---
 
@@ -253,6 +348,89 @@ If the user chooses **E**: ask which line numbers to exclude (e.g. "3, 7"), upda
 | CV · Profil | Optionnel | Background admin |
 | Administratif | Optionnel | Keep for completeness |
 | Autre | Optionnel | Catch-all |
+
+---
+
+## France Travail portal fields & comment templates
+
+What France Travail asks for each action type, and the French comment template to pre-fill. Templates use `[placeholders]`. Keep comments under 200 characters.
+
+**This section grows over time** — update it as Zack discovers what the portal actually asks for each category.
+
+### Candidature (job application)
+FT portal asks for:
+- Nom de l'entreprise
+- Intitulé du poste
+- Site / canal utilisé (job board name, company website, email, etc.)
+- Description courte (comment field)
+
+Required fields in FT Log: Entreprise, Poste/Sujet, Mode, Notes (for site used — prefix `FT: site=Indeed` etc.)
+
+Comment template:
+> Candidature au poste de [Poste] chez [Entreprise] via [Site]. [Dossier envoyé par email / en ligne.]
+
+### Entretien (interview)
+FT portal asks for:
+- Nom de l'entreprise
+- Intitulé du poste
+- Type d'entretien (téléphonique / visioconférence / présentiel)
+- Description courte
+
+Required fields in FT Log: Entreprise, Poste/Sujet, Mode
+
+Comment template:
+> Entretien [téléphonique / en visioconférence / en présentiel] pour le poste de [Poste] chez [Entreprise].
+
+### Contact recruteur
+FT portal asks for:
+- Nom du cabinet ou recruteur
+- Poste ou domaine concerné
+- Mode de contact
+- Description courte
+
+Required fields: Entreprise (cabinet name), Poste/Sujet, Mode
+
+Comment template:
+> Contact avec [Cabinet/Recruteur] au sujet d'opportunités en [domaine/poste]. [Échange par téléphone / email.]
+
+### Contact réseau
+FT portal asks for:
+- Nom de la personne / entreprise
+- Objet de l'échange
+- Mode de contact
+
+Required fields: Entreprise, Poste/Sujet (use contact name or topic), Mode
+
+Comment template:
+> Échange avec [Nom] ([Entreprise]) concernant [les opportunités finance / le marché de l'emploi / un poste spécifique].
+
+### Formation
+FT portal asks for:
+- Intitulé de la formation
+- Organisme
+- Durée / modalité
+
+Required fields: Poste/Sujet (formation title), Entreprise (organisme), Mode
+
+Comment template:
+> Formation : [Intitulé] — [Organisme]. [Durée / En ligne / Présentiel.]
+
+### Événement
+FT portal asks for:
+- Nom de l'événement
+- Lieu / format
+- Description
+
+Required fields: Poste/Sujet (event name), Entreprise (organiser if applicable), Mode
+
+Comment template:
+> Participation à [Nom de l'événement]. [Lieu / En ligne.] Secteur : finance / emploi cadres.
+
+### France Travail (advisor meeting)
+Required fields: Poste/Sujet (object of meeting), Mode
+
+Comment template:
+> Rendez-vous avec conseiller France Travail. [Objet : point sur la recherche / suivi du dossier.]
 
 ---
 
