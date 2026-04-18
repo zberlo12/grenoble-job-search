@@ -59,11 +59,12 @@ France Travail Log — what would you like to do?
 2. Add     — log a manual entry
 3. Report  — view and triage entries for a period
 4. All     — sync then show report
+5. Stats   — week-by-week activity summary (posts considered vs applied)
 ```
 
-Map responses to modes: `sync`, `add`, `report`, or run sync then report.
+Map responses to modes: `sync`, `add`, `report`, `stats`, or run sync then report.
 
-If `$ARGUMENTS` is `add`, `sync`, or `report`, go directly to that step.
+If `$ARGUMENTS` is `add`, `sync`, `report`, or `stats`, go directly to that step.
 
 ---
 
@@ -434,6 +435,47 @@ Required fields: Poste/Sujet (object of meeting), Mode
 
 Comment template:
 > Rendez-vous avec conseiller France Travail. [Objet : point sur la recherche / suivi du dossier.]
+
+---
+
+## Step 2d — Stats mode
+
+Pull all rows from `job_applications_db_id` (full history, no date filter). Group by ISO week (Monday = start of week).
+
+For each row:
+- **Counted as "postes évalués"** (posts considered): any Status except Dismissed
+- **Counted as "candidatures déposées"** (applications filed): Status is Applied, Docs Ready, Interview, Offer, or Rejected WITH a Date Applied set
+
+Build a week-by-week table sorted chronologically. Output:
+
+```
+═══════════════════════════════════════════════════════════
+FRANCE TRAVAIL — Activité hebdomadaire
+Depuis : [earliest date] → [today]
+═══════════════════════════════════════════════════════════
+
+Semaine              Début       Évalués   Candidatures
+──────────────────────────────────────────────────────────
+W41 2025             06/10/25        8            3
+W42 2025             13/10/25        5            2
+W43 2025             20/10/25        6            3
+...
+W15 2026             13/04/26       12            2
+──────────────────────────────────────────────────────────
+TOTAL                                XX           XX
+Moyenne / semaine                   X.X          X.X
+Semaines avec ≥ 3 candidatures : X
+Semaines actives (≥ 1 candidature) : X / X total
+```
+
+This is the audit-ready activity-volume proof. If a controller asks "combien de postes avez-vous cherché par semaine ?", show them this table.
+
+After displaying, offer:
+```
+Options:
+  R — Export this as a report (add to the email draft)
+  Q — Quit
+```
 
 ---
 
