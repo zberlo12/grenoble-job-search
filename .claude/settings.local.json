@@ -2,7 +2,42 @@
   "permissions": {
     "allow": [
       "Bash(gh auth:*)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-create-database",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "mcp__claude_ai_Gmail__gmail_search_messages",
+      "mcp__claude_ai_Notion__notion-update-page",
+      "mcp__claude_ai_Gmail__gmail_read_thread",
+      "mcp__claude_ai_Notion__notion-update-data-source",
+      "Bash(python:*)",
+      "Bash(mkdir -p /c/tmp)",
+      "Read(//c//**)",
+      "Read(//c/tmp//**)",
+      "Bash(python3 -c ':*)",
+      "Bash(pip show:*)",
+      "Bash(python3:*)",
+      "Bash(py -c \"print\\('hello'\\)\")",
+      "Bash(py:*)",
+      "Bash(git:*)",
+      "mcp__claude_ai_Gmail__search_threads",
+      "mcp__claude_ai_Gmail__get_thread",
+      "mcp__claude_ai_Indeed__search_jobs",
+      "WebFetch(domain:to.indeed.com)",
+      "mcp__claude_ai_Indeed__get_job_details",
+      "WebFetch(domain:fr.indeed.com)",
+      "WebFetch(domain:www.apec.fr)",
+      "WebFetch(domain:openclaw.ai)",
+      "Skill(schedule)",
+      "Bash(curl *)",
+      "Skill(job-search-daily-scan)",
+      "Bash(cp 'C:\\\\Users\\\\zberl\\\\OneDrive\\\\Documents\\\\France Job Applications\\\\2026\\\\WORD VERSION FOR EDIT\\\\cv_template_fpa_fr.docx' 'C:\\\\Users\\\\zberl\\\\OneDrive\\\\Documents\\\\Code\\\\Grenoble-job-search\\\\templates\" 2>/dev/null && echo fpa-fr' 'ok || echo fpa-fr' 'missing *)",
+      "Bash(cp 'C:\\\\Users\\\\zberl\\\\OneDrive\\\\Documents\\\\France Job Applications\\\\2026\\\\WORD VERSION FOR EDIT\\\\cv_template_raf_fr.docx' 'C:\\\\Users\\\\zberl\\\\OneDrive\\\\Documents\\\\Code\\\\Grenoble-job-search\\\\templates\" 2>/dev/null && echo raf-fr' 'ok || echo raf-fr' 'missing *)",
+      "Bash(cp 'C:\\\\Users\\\\zberl\\\\OneDrive\\\\Documents\\\\France Job Applications\\\\2026\\\\WORD VERSION FOR EDIT\\\\cv_template_hof_en.docx' 'C:\\\\Users\\\\zberl\\\\OneDrive\\\\Documents\\\\Code\\\\Grenoble-job-search\\\\templates\" 2>/dev/null && echo hof-en' 'ok || echo hof-en' 'missing *)",
+      "mcp__claude_ai_Gmail__create_draft",
+      "mcp__claude_ai_Google_Calendar__create_event",
+      "Bash(grep -E \"\\\\.md$\")"
     ]
   }
 }
