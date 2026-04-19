@@ -242,6 +242,7 @@ ACTIONS À DÉCLARER
 #1  2026-04-08  Candidature
     Schneider Electric — Finance Director
     Site : Indeed
+    🔗 https://fr.indeed.com/viewjob?jk=XXXXXXX
     💬 Candidature au poste de Finance Director chez Schneider Electric via Indeed.
 
 #2  2026-04-10  Entretien
@@ -305,6 +306,7 @@ Généré le : [today's date]
     Entreprise : Schneider Electric
     Poste :      Finance Director
     Site :       Indeed
+    🔗 https://fr.indeed.com/viewjob?jk=XXXXXXX
     ▶ Candidature au poste de Finance Director chez Schneider Electric via Indeed.
 
 #2  10/04/2026  —  Entretien
@@ -367,9 +369,12 @@ FT portal asks for:
 - Nom de l'entreprise
 - Intitulé du poste
 - Site / canal utilisé (job board name, company website, email, etc.)
+- Lien vers l'offre (job posting URL — paste into the portal comment or URL field)
 - Description courte (comment field)
 
-Required fields in FT Log: Entreprise, Poste/Sujet, Mode, Notes (for site used — prefix `FT: site=Indeed` etc.)
+Required fields in FT Log: Entreprise, Poste/Sujet, Mode, Job URL (from Job Applications DB — carry forward to report), Notes (for site used — prefix `FT: site=Indeed` etc.)
+
+**Always include the Job URL in the report and email draft** for Candidature entries — pull it from the Job Applications row via the sync. If missing, flag it so Zack can paste manually.
 
 Comment template:
 > Candidature au poste de [Poste] chez [Entreprise] via [Site]. [Dossier envoyé par email / en ligne.]
