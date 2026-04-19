@@ -262,10 +262,27 @@ Only if the listing has enough information to rank it does Step 5 proceed to the
 ## Step 6 — Write to Notion
 
 Write **every** listing to Notion — including dismissed ones. No listing is silently discarded.
-Call `mcp__claude_ai_Notion__notion-create-pages` with:
+
+**Route listings to two different databases based on outcome:**
+
+| Outcome | Write to | Status |
+|---|---|---|
+| Priority A (all data present, ranked) | Main Job Applications DB | `To Apply` |
+| Priority B / C (all data present, ranked) | **Review Queue DB** | `To Assess` |
+| Rescue gate triggered (missing info) | **Review Queue DB** | `Needs Info` |
+| Dismissed (definitive disqualifier) | Main Job Applications DB | `Dismissed` |
+
+**Main Job Applications DB** (for Priority A and Dismissed):
 ```
 parent: { type: "data_source_id", data_source_id: "[Job Applications data source ID from profile Section 7]" }
 ```
+
+**Review Queue DB** (for To Assess and Needs Info):
+```
+parent: { type: "data_source_id", data_source_id: "[Review Queue data source ID from profile Section 7]" }
+```
+The Review Queue data source ID is stored in profile Section 7 as **Review Queue data source**.
+The Review Queue schema accepts the same properties as below (except `English` — omit that field for Review Queue entries).
 
 Properties (SQLite format):
 
@@ -278,15 +295,17 @@ Properties (SQLite format):
 | `Salary` | as stated or `"Not stated"` |
 | `Priority` | `A` / `B` / `C` (omit if Skip) |
 | `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Assess` for ranked listings; `Needs Info` if rescue gate applied; `Dismissed` if definitive disqualifier. (`Potentially Apply` and `To Apply` set later by `/job-review`) |
-| `date:Date Added:start` | today as ISO string e.g. `"2026-04-12"` |
+| `Status` | `To Apply` (Priority A → main DB); `To Assess` (B/C ranked → Review Queue); `Needs Info` (rescue gate → Review Queue); `Dismissed` (definitive disqualifier → main DB) |
+| `date:Date Added:start` | the SCAN DATE as ISO string (i.e. yesterday for a default run) e.g. `"2026-04-18"` — NOT today's run date |
 | `Job URL` | URL string if available |
 | `Gmail Thread URL` | `https://mail.google.com/mail/u/0/#all/[threadId]` if from Gmail |
 | `Red Flags` | JSON array string e.g. `"[\"Low salary\"]"` — from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope`, `Off-topic` |
 | `Missing Info` | JSON array string e.g. `"[\"Salary\", \"Hybrid policy\"]"` — from: `Salary`, `Hybrid policy`, `Scope`, `Full JD`, `Company name`. Populate when rescue gate applied |
 | `Alert Keyword` | The alert search term extracted from the email subject (e.g. `"Directeur Financier"`, `"FP&A Grenoble"`) |
 | `Notes` | 2–3 sentence analysis; if rescue gate applied, start with `"QUEUED:"`; if dismissed, start with `"Auto-dismissed: [reason]"` |
-| `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` |
+| `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` (main DB only — not in Review Queue schema) |
+
+**Action field (Review Queue only):** The Review Queue title field is named `Action`, not `Job Title`. Set it to: `"[Status] — [Job Title] @ [Company]"` (e.g. `"Needs Info — Controller @ Jobgether"`). Also set `Job Title` separately.
 
 ---
 

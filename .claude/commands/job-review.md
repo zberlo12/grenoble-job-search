@@ -1,7 +1,7 @@
 ---
-description: Drain the "Needs Info" queue in the Job Applications Notion database. Sweeps all rows for auto-enrichment first (Indeed MCP, Gmail thread re-read, WebFetch for non-LinkedIn URLs), then batches any manual-paste rows at the end. Trigger with /job-review.
+description: Drain the Review Queue — enriches Needs Info rows (auto-fetch + manual paste), then presents To Assess rows for confirm/override. Reads from the dedicated Review Queue DB (not the main Job Applications DB). Writes resolved rows to the main DB and deletes them from the queue. Trigger with /job-review.
 argument-hint: Optional — pass a row count limit (e.g. "5") to process only the N oldest queued listings
-allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__gmail_read_thread, WebFetch
+allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__gmail_read_thread, WebFetch
 ---
 
 # Job Review Queue Drainer
@@ -9,36 +9,44 @@ allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__noti
 ## Step 0 — Load User Profile
 
 Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context: **Section 1** (user name), **Section 7** (Notion IDs — Job Applications data source ID).
+Extract into context:
+- **Section 1** (user name)
+- **Section 7**: `Job Applications data source ID` and `Review Queue data source ID`
+
 If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
 
 ---
 
-You are helping the user (name from profile) work through the queue of job listings that the daily
-scan flagged as "Needs Info" — plausible matches where salary, hybrid policy, full scope, or company
-name was missing from the source alert.
+You are helping the user (name from profile) work through the Review Queue — a small staging table holding listings the daily scan flagged as either:
+- **Needs Info** — plausible matches where salary, hybrid policy, full scope, or company name was missing
+- **To Assess** — fully ranked listings (B/C priority) awaiting confirmation before entering the main pipeline
 
-Your goal: enrich each queued row with the missing information, re-rank it using the
-standard `/job-search` criteria, and update the Notion row so it moves out of the queue.
+Your goal: enrich Needs Info rows and confirm To Assess rows, then write resolved entries to the main Job Applications DB and clear them from the Review Queue.
 
 ---
 
 ## Step 1 — Fetch the Queue
 
-Call `mcp__claude_ai_Notion__notion-fetch` on the Job Applications data source (ID from profile Section 7).
+Call `mcp__claude_ai_Notion__notion-fetch` on the **Review Queue data source** (ID from profile Section 7 — "Review Queue data source ID").
 
-Filter the returned rows client-side to `Status = "Needs Info"`. Sort oldest first by `Date Added`.
+Because the Review Queue is small, this returns ALL rows reliably — no search needed.
 
-If `$ARGUMENTS` is a number, limit to that many rows. Otherwise process all of them.
+Split rows into two groups:
+- **Group A — Needs Info**: `Status = "Needs Info"` — need enrichment before ranking
+- **Group B — To Assess**: `Status = "To Assess"` — already ranked by the scan, need confirmation
 
-If the queue is empty, say "Queue is empty — nothing to review" and stop.
+Sort each group oldest first by `Date Added`.
+
+If `$ARGUMENTS` is a number, limit Group A to that many rows (Group B always shown in full).
+
+If both groups are empty, say "Review Queue is empty — nothing to review" and stop.
 
 ---
 
-## Step 2 — Enrichment Sweep (silent — no user pauses)
+## Step 2 — Enrichment Sweep for Group A (silent — no user pauses)
 
-Loop through every queued row. For each row, attempt auto-enrichment using the ladder below.
-**Do not pause or ask Zack anything during this sweep.**
+Loop through every Group A (Needs Info) row. For each row, attempt auto-enrichment using the ladder below.
+**Do not pause or ask the user anything during this sweep.**
 
 **Context-hygiene rule:** If a fetched page exceeds ~8K characters, extract only the structured fields (salary, location, hybrid/remote, scope, language, contract type, seniority) and discard the rest. Do NOT preserve full JD text in conversation context.
 
@@ -51,7 +59,7 @@ If `Job URL` matches `*indeed.com/*` or `to.indeed.com/*`, resolve the shortlink
 If `Gmail Thread URL` is set, extract the thread ID (last segment after `#all/`) and call `mcp__claude_ai_Gmail__gmail_read_thread`. Only trust this rung if the thread body contains more than a one-line alert snippet.
 
 **Rung 3 — LinkedIn short-circuit**
-If `Job URL` is a `linkedin.com/*` URL, skip rungs 4 entirely. Add this row to the **manual-paste list** with reason `LinkedIn — blocked`. Move to next row.
+If `Job URL` is a `linkedin.com/*` URL, skip rung 4 entirely. Add this row to the **manual-paste list** with reason `LinkedIn — blocked`. Move to next row.
 
 **Rung 4 — WebFetch (non-LinkedIn URLs)**
 If `Job URL` exists and is not LinkedIn, call `WebFetch` on the URL:
@@ -61,7 +69,7 @@ Do NOT retry if the first call returns blocked/truncated/empty. Fall through to 
 
 **If enrichment succeeded (rungs 1–4):**
 - Re-rank immediately using Step 3 criteria.
-- Update the Notion row (Step 4).
+- Write resolved row to main DB + delete from Review Queue (Step 4).
 - Mark as auto-processed.
 
 **If enrichment failed:**
@@ -70,7 +78,7 @@ Do NOT retry if the first call returns blocked/truncated/empty. Fall through to 
 
 ---
 
-## Step 3 — Re-rank (apply after successful enrichment)
+## Step 3 — Re-rank (apply after successful enrichment of a Needs Info row)
 
 With the enriched information, apply the standard `/job-search` analysis:
 
@@ -84,54 +92,87 @@ If information is STILL missing after enrichment, mark as manual-paste list (not
 
 ---
 
-## Step 4 — Update Notion Row (apply after re-ranking)
+## Step 4 — Write to Main DB + Delete from Review Queue
 
-Call `mcp__claude_ai_Notion__notion-update-page` on the row ID with:
+When a row is fully resolved (either auto-enriched or manually pasted), do two things:
+
+**4a — Create in main Job Applications DB:**
+Call `mcp__claude_ai_Notion__notion-create-pages` with:
+```
+parent: { type: "data_source_id", data_source_id: "[Job Applications data source ID from profile Section 7]" }
+```
+
+Properties to write (carry forward all fields from the Review Queue row, update as needed):
 
 | Property | New value |
 |---|---|
+| `Job Title` | from Review Queue row |
+| `Company` | from Review Queue row |
+| `Source` | from Review Queue row |
+| `Location` | from Review Queue row (updated if enrichment revealed more) |
+| `Salary` | filled in if enrichment revealed one |
 | `Priority` | final `A` / `B` / `C` (omit if moving to Dismissed) |
 | `CV Approach` | final selection: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Apply` (Priority A), `Potentially Apply` (Priority B), `Dismissed` (Priority C / declined), `Needs Info` (still missing data) |
-| `Missing Info` | `"[]"` (clear it) unless status stays `Needs Info` |
+| `Status` | `To Apply` (A), `Potentially Apply` (B), `Dismissed` (C / declined / skip) |
+| `date:Date Added:start` | carry forward from Review Queue row |
+| `Job URL` | from Review Queue row |
+| `Gmail Thread URL` | from Review Queue row |
 | `Red Flags` | updated JSON array |
-| `Salary` | fill in if enrichment revealed one |
+| `Missing Info` | `"[]"` (cleared) |
+| `Alert Keyword` | from Review Queue row |
 | `Notes` | rewritten — strip `QUEUED:` prefix, replace with final 2–3 sentence analysis |
+| `English` | `"__YES__"` or `"__NO__"` based on enriched data |
 
 **Priority → Status mapping:**
 - Priority A → `Status: To Apply`
 - Priority B → `Status: Potentially Apply`
 - Priority C → `Status: Dismissed`
 - Skip → `Status: Dismissed`
-- Still uncertain → `Status: Needs Info`
+
+**4b — Delete from Review Queue:**
+Call `mcp__claude_ai_Notion__notion-update-page` on the Review Queue row ID with:
+- `Status` → set to any value that marks it done (use `"Dismissed"` as a sentinel — the Review Queue only has Needs Info / To Assess options, so just update the Notes field to mark it resolved)
+
+Actually: since the Review Queue doesn't have a "Done" status option, update the row's Notes to append `" | Resolved 2026-XX-XX → [final Status in main DB]"`. This keeps the row visible for audit but marks it clearly resolved. You can also just leave it — the main job is to write it to the main DB. The Review Queue will be re-evaluated on each /job-review run based on Status, so if you want to truly remove it, you'd need to delete it — but since deletion isn't supported via MCP, mark Notes as resolved and instruct the user to archive/delete manually if needed.
+
+**Simpler approach:** After writing to main DB, update the Review Queue row's `Status` field. Since the only options are "Needs Info" and "To Assess", leave Status unchanged but update Notes to `"[RESOLVED → main DB]"`. The queue will shrink over time as rows are resolved and the daily scan stops adding to those spots.
+
+**Practical instruction:** For now, focus on creating the main DB entry. Then update the Review Queue row's Notes to mark it resolved. The user will see the queue shrink in /job-morning counts.
 
 ---
 
-## Step 5 — Auto-processed Summary
+## Step 5 — Group B: To Assess Confirmation Pass
 
-After the sweep completes, output:
+After Group A is fully processed (enrichment sweep + any manual paste remaining), present all Group B (To Assess) rows as a confirmation table. All data was already saved by the daily scan — no enrichment needed.
 
 ```
-Auto-processed [N] rows. [M] rows need manual JD paste.
+## To Assess — [N] listings to confirm
 
-Successfully ranked:
-- [Title] @ [Company] → Priority [X] → [Status]
-- ...
-
-Needs manual paste ([M] total):
-1. [Title] @ [Company] — [reason: LinkedIn / WebFetch failed / no URL]  🔗 [URL if any]
-2. ...
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note |
+|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | [1-line scan note] |
+...
 ```
 
-If M = 0, stop here and output the final summary (Step 8).
+For each row offer three options:
+- **[K] Keep** — accept scan's priority → promotes to `Potentially Apply` (B) or `To Apply` (A) in main DB
+- **[U] Upgrade** — override to higher priority (e.g. C→B, B→A) → enter new priority
+- **[D] Dismiss** — move to `Dismissed` in main DB
+
+Zack can respond with one letter per row (e.g. `1K 2D 3U:A`) or handle them one at a time.
+
+For each confirmed row:
+- Write to main DB (Step 4a) with the confirmed/overridden priority and status
+- Mark Review Queue row as resolved (Step 4b)
+
+If Group B is empty, skip this step.
 
 ---
 
-## Step 6 — Manual Paste Loop
+## Step 6 — Manual Paste Loop (for remaining Group A rows)
 
-Work through the manual-paste list one at a time. For each row:
+If any Group A rows couldn't be auto-enriched, work through them one at a time:
 
-Present:
 ```
 [N/M] **[Job Title]** @ [Company]
 📍 [Location]  ·  💰 [Salary or "Not stated"]  ·  Source: [Source]
@@ -143,30 +184,38 @@ QUEUED note: [first line of Notes after "QUEUED:"]
 Then ask:
 > "Paste the full job description, or type `skip` to leave it queued, or `dismiss` to move it to Dismissed."
 
-- JD pasted → re-rank (Step 3) → update Notion (Step 4) → move to next row.
-- `skip` → leave `Status: Needs Info`, move to next row.
-- `dismiss` → update `Status: Dismissed`, move to next row.
+- JD pasted → re-rank (Step 3) → write to main DB + mark resolved (Step 4) → move to next row.
+- `skip` → leave in Review Queue with `Status: Needs Info`, move to next row.
+- `dismiss` → write to main DB as Dismissed → mark resolved in Review Queue → move to next row.
 
-At any point Zack can type `stop` to halt and jump to the final summary.
+At any point the user can type `stop` to halt and jump to the final summary.
 
 ---
 
 ## Step 7 — Hard disqualifier fast-path
 
-If enriched data reveals a clear disqualifier (Paris on-site, salary stated below €40K, unrelated function) — move straight to `Dismissed` and tell Zack in one sentence. Do not ask for confirmation.
+If enriched data reveals a clear disqualifier (Paris on-site, salary stated below €40K, unrelated function) — write to main DB as Dismissed and tell the user in one sentence. Do not ask for confirmation.
 
 ---
 
 ## Step 8 — Final Summary
 
 ```
-## Queue Review Complete
+## Review Queue Drainer Complete
 
-**Processed:** [N]
+### Group A — Needs Info
+**Auto-processed:** [N]
+**Manual paste resolved:** [N]
+**Left in queue (skipped):** [N]
+
+### Group B — To Assess
+**Confirmed:** [N]
+**Left in queue:** [N]
+
+### Outcomes (main DB)
 **Moved to `To Apply`:** [N] — [titles]
 **Moved to `Potentially Apply`:** [N] — [titles]
 **Moved to `Dismissed`:** [N]
-**Left in `Needs Info`:** [N]
 
 ### Notable finds
 [Any Priority A promotions worth flagging]
@@ -178,4 +227,5 @@ If enriched data reveals a clear disqualifier (Paris on-site, salary stated belo
 
 - Be critical, not agreeable. Follow the same "no soft-pedalling" rule as `/job-search`.
 - Never mark a row as `To Apply` or `Potentially Apply` without an explicit CV Approach selection.
-- Process one manual-paste row at a time so Zack can interject between listings.
+- Process one manual-paste row at a time so the user can interject between listings.
+- The Review Queue data source ID is different from the Job Applications data source ID — always fetch from the correct one.
