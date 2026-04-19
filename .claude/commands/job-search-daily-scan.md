@@ -2,7 +2,7 @@
 description: Daily Gmail job alert scan agent (Gmail-only). Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Notion, and posts a daily digest. For Indeed direct searches use /job-search-indeed-local or /job-search-indeed-remote. This runs automatically each morning — do not invoke manually unless testing.
 argument-hint: Optional. `MM/DD/YY` for a single day, `MM/DD/YY+` to catch up from that date through yesterday, or append `@source` to filter to one sender e.g. `03/26/26+ @linkedin` or `04/14/26 @cadremploi`. Default (no arg) scans yesterday, all sources.
 model-note: Schedule this cron on Claude Sonnet (cost-efficient). The tiebreaker rule in Step 5 compensates for Sonnet's weaker judgment on borderline calls by biasing toward Needs Info rather than Skip.
-allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-fetch
+allowed-tools: mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-fetch
 ---
 
 # Daily Job Alert Scan Agent
@@ -256,6 +256,36 @@ Only if the listing has enough information to rank it does Step 5 proceed to the
 - Orange/Red zone without hybrid confirmed
 - Agency opacity (no company name, vague scope)
 - CDD/interim without strong justification
+
+---
+
+## Step 5B — Pre-Write Enrichment (for Needs Info listings only)
+
+Before writing any listing flagged as `Needs Info` to the Review Queue, attempt to fill in the missing fields immediately while the listing is fresh. This prevents the enrichment ladder in `/job-review` from hitting expired URLs days later.
+
+**Only run this step for listings routed to `Status = "Needs Info"`.** Skip for ranked (To Assess) and Dismissed listings.
+
+Try in order. Stop as soon as one attempt succeeds and fills at least one missing field.
+
+**Rung 1 — Indeed API (for Indeed URLs only):**
+If `Job URL` contains `jk=` (Indeed listing), extract the job ID and call `mcp__claude_ai_Indeed__get_job_details`.
+- If successful: extract salary, contract type, hybrid/remote policy, seniority, scope, language requirements. Fill in the `Missing Info` fields. Update `Salary` if found. Append extracted details to `Notes` (after the `QUEUED:` line).
+- If the enrichment resolves ALL missing fields: re-rank using Step 5 criteria. If now rankable, change `Status` to `To Assess` (or promote to `To Apply` if Priority A). Clear `Missing Info`.
+- If the call errors or returns no useful data: continue to Rung 2.
+
+**Rung 2 — WebFetch (non-LinkedIn, non-Indeed, or if Rung 1 failed):**
+If `Job URL` exists and is not LinkedIn, call WebFetch:
+> "Extract salary, contract type, location, hybrid/remote policy, seniority, scope of role, language requirements. Return as structured fields only."
+- If successful: same handling as Rung 1 success above.
+- If blocked/empty/404: continue to Rung 3.
+
+**Rung 3 — LinkedIn short-circuit:**
+If `Job URL` is LinkedIn, skip enrichment entirely. Write to Review Queue as `Needs Info` unchanged.
+
+**Rung 4 — No URL / all rungs failed:**
+Write to Review Queue as `Needs Info` unchanged. The manual-paste loop in `/job-review` handles these.
+
+**Context-hygiene:** Discard full JD text after extracting fields. Do NOT store the full JD in `Notes` — store only the structured fields that fill gaps.
 
 ---
 
