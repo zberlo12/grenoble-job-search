@@ -62,13 +62,12 @@ Today's date comes from the injected `currentDate` context — use it to compute
 **Automatic catch-up check (runs when $ARGUMENTS is empty):**
 
 If no arguments were given (default daily run), before starting the scan:
-1. Fetch the Daily Scans archive page (ID from profile Section 7)
-2. Find the most recent `## Job Alert Scan — YYYY-MM-DD` heading in the page content
-3. Parse that date and compute gap = yesterday − most-recent-scan-date in days
-4. If gap > 1: automatically expand the scan range from (most-recent-scan-date + 1 day) through yesterday.
+1. Use `notion-search` to find all pages titled "Job Alert Scan — " under the Daily Scans archive page (ID from profile Section 7). Sort results by title descending to find the most recent date.
+2. Parse the date from the most recent page title (format: "Job Alert Scan — YYYY-MM-DD") and compute gap = yesterday − most-recent-scan-date in days
+3. If gap > 1: automatically expand the scan range from (most-recent-scan-date + 1 day) through yesterday.
    Add a note at the top of each digest section: "⚠️ Catch-up scan (missed [N] days)"
-5. If gap = 1 or 0: normal single-day scan (yesterday only)
-6. If no entries exist yet in the archive: scan yesterday only (first run)
+4. If gap = 1 or 0: normal single-day scan (yesterday only)
+5. If no subpages found: scan yesterday only (first run)
 
 **Run Steps 2 through 7 once per date in the resolved list**, in chronological order. Each date gets its own Gmail/Indeed sweep, its own dedup pass against Notion, and its own dated section in the Daily Scans archive. Do not merge days into one digest — the archive stays cleaner with one section per day, and `/job-review` queue additions remain traceable to a specific day.
 
@@ -201,7 +200,7 @@ If job IDs match → duplicate. Skip.
 
 **Catch-up overlap warning:**
 When $ARGUMENTS contains a date range (catch-up mode), before processing each date
-search the Daily Scans archive page for a heading `## Job Alert Scan — [YYYY-MM-DD]`.
+use `notion-search` to find a subpage titled "Job Alert Scan — [YYYY-MM-DD]" under the Daily Scans archive page.
 If found → the trigger already scanned that date. Prepend to that day's digest:
 `⚠️ This date was already scanned by the trigger — check Notion for any duplicates.`
 Do not skip the date; flag it clearly so manual review is easy.
@@ -341,17 +340,21 @@ Do NOT include rows already auto-expired (>60 days).
 
 ---
 
-## Step 7 — Append Digest to Daily Scans Archive
+## Step 7 — Create Scan Subpage in Daily Scans Archive
 
-After processing all listings, append a new dated section to the **Daily Scans** Notion page.
+After processing all listings for a date, create a **new subpage** under the Daily Scans archive page — one subpage per scan date. This makes each day's digest independently fetchable and diagnosable.
 
-**Daily Scans page ID:** from profile Section 7 (Daily Scans archive)
+**Daily Scans archive page ID:** from profile Section 7 (Daily Scans archive)
 
-Call `mcp__claude_ai_Notion__notion-update-page` with `command: "insert_content_after"`, targeting the last block of the page, with Markdown content in the following format:
+Call `mcp__claude_ai_Notion__notion-create-pages` with:
+```
+parent: { type: "page_id", page_id: "[Daily Scans archive page ID from profile Section 7]" }
+title: "Job Alert Scan — YYYY-MM-DD"
+```
+
+Then call `mcp__claude_ai_Notion__notion-update-page` to write the content body:
 
 ```markdown
-## Job Alert Scan — [DATE]
-
 📊 **[N] new listings today  ·  [N] pursued  ·  [N] dismissed**
 *(+[N] duplicates already in Notion — not counted in today's totals)*
 
@@ -373,18 +376,12 @@ Call `mcp__claude_ai_Notion__notion-update-page` with `command: "insert_content_
 
 ### Notable Listings
 - [2–3 bullet points for any Priority A finds, or interesting B listings]
-
----
 ```
 
-If no new listings were found, append instead:
+If no new listings were found, write instead:
 
 ```markdown
-## Job Alert Scan — [DATE]
-
 No new job listings found in alerts for this date.
-
----
 ```
 
-The trailing `---` separator keeps day boundaries clear in the archive.
+Each scan date gets its own subpage. The title "Job Alert Scan — YYYY-MM-DD" is the key used by `/job-morning` and catch-up logic to locate and read prior scan results.
