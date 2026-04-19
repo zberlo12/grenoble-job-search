@@ -349,7 +349,7 @@ After processing all listings for a date, create a **new subpage** under the Dai
 Call `mcp__claude_ai_Notion__notion-create-pages` with:
 ```
 parent: { type: "page_id", page_id: "[Daily Scans archive page ID from profile Section 7]" }
-title: "Job Alert Scan — YYYY-MM-DD"
+title: "Job Alert Scan — YYYY-MM-DD"   ← use the SCAN DATE (the date whose emails were searched, i.e. yesterday for a default run), not today's date
 ```
 
 Then call `mcp__claude_ai_Notion__notion-update-page` to write the content body:

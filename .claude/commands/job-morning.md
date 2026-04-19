@@ -14,15 +14,15 @@ Fetch User Profile page `3452fc3ca02a811ab75af9805f50ef8b`. Extract from Section
 
 **Primary source — scan subpage:**
 
-Use `notion-search` to find a page titled exactly "Job Alert Scan — [today's date in YYYY-MM-DD format]" under the Daily Scans archive page. If found, fetch it and read the digest content to extract:
+The daily scan runs each morning and processes **yesterday's** emails — so the subpage is always titled with yesterday's date. Use `notion-search` to find a page titled exactly "Job Alert Scan — [yesterday's date in YYYY-MM-DD format]" under the Daily Scans archive page. If found, fetch it and read the digest content to extract:
 - Total new listings found
 - Counts by Status: Potentially Apply, Needs Info, To Assess, Dismissed
 
-**Fallback — Job Applications DB (if no scan subpage found today):**
+**Fallback — two days ago (if no subpage found for yesterday):**
 
-Also search for "Job Alert Scan — [yesterday's date]" in case the scan ran late. If either subpage is found, use it.
+Also search for "Job Alert Scan — [two days ago]" in case the scan ran for an earlier date. If found, use it and note the date.
 
-If no subpage exists for today or yesterday: set all scan counts to "?" and add a warning:
+If no subpage exists for yesterday or the day before: set all scan counts to "?" and add a warning:
 `⚠️ No scan subpage found for today or yesterday — the nightly scan may have failed. Check the Daily Scans archive in Notion or run /job-search-daily-scan manually.`
 
 **Pipeline snapshot (always run, regardless of scan subpage):**
