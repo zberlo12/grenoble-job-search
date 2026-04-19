@@ -71,6 +71,39 @@ After identifying the row, fetch it fully. Extract: Job Title, Company, Location
 
 ---
 
+## Step 1b — Pre-flight check
+
+Before building any documents, run these five checks against the row data and user profile rules. If the row was already in `To Apply` status it has likely been reviewed, but confirm anyway — circumstances change.
+
+| # | Check | Pass condition |
+|---|---|---|
+| 1 | **Salary** | Salary field ≥ €55K, OR salary not stated (proceed with caution flag) |
+| 2 | **Location** | Location maps to Green or Yellow zone, OR role is confirmed remote/hybrid |
+| 3 | **Contract type** | CDI — not CDD, intérim, alternance, freelance, or stage |
+| 4 | **No duplicate** | No other row for the same Company with Status = Applied / Docs Ready / Interview / Offer |
+| 5 | **Role level** | Title/scope is not junior, alternance, or clearly below senior level |
+
+**If all five pass:** confirm with `✅ Pre-flight passed — proceeding to document build.` then continue to Step 2.
+
+**If any fail:** display a clear summary:
+
+```
+⚠️ Pre-flight issues found:
+
+  ❌ Salary: stated €42K — below €55K floor
+  ❌ Contract: CDD (12 months)
+  ✅ Location: Grenoble (Green)
+  ✅ No duplicate found
+  ✅ Role level: senior scope
+
+Proceed anyway? [Y/N]
+```
+
+If Zack confirms Y: note the override in the Notion row's Notes field and continue.
+If N: stop. Offer to update the row Status to Dismissed with a reason.
+
+---
+
 ## Step 2 — Load Resources in Parallel
 
 Call all three simultaneously:

@@ -28,7 +28,7 @@ Extract from Section 7 (Notion IDs):
 Create the France Travail Log database as a child of the job search root page with these properties:
 - **Action** (title) — auto-generated description
 - **Date** (date)
-- **Catégorie** (select): Candidature / Entretien / Contact recruteur / Contact réseau / Suivi candidature / Formation / Événement / France Travail / CV · Profil / Administratif / Autre
+- **Catégorie** (select): Candidature / Entretien / Contact recruteur / Contact réseau / Suivi candidature / Formation / Événement / France Travail / CV · Profil / Administratif / Présélection / Autre
 - **Priorité** (select): Obligatoire / Impactant / Optionnel
 - **Entreprise · Organisme** (rich_text)
 - **Poste · Sujet** (rich_text)
@@ -351,6 +351,7 @@ If **M**: update all entries that were marked R in the triage to `Déclaré` in 
 | Formation | Optionnel | Good to show but lower weight |
 | CV · Profil | Optionnel | Background admin |
 | Administratif | Optionnel | Keep for completeness |
+| Présélection | Optionnel | Role evaluated but screened out pre-application (salary / location / contract / duplicate) — proves active, reasoned job searching |
 | Autre | Optionnel | Catch-all |
 
 ---
