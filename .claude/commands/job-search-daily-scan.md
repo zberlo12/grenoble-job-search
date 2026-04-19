@@ -327,8 +327,8 @@ Properties (SQLite format):
 | `CV Approach` | one of: `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
 | `Status` | `To Apply` (Priority A → main DB); `To Assess` (B/C ranked → Review Queue); `Needs Info` (rescue gate → Review Queue); `Dismissed` (definitive disqualifier → main DB) |
 | `date:Date Added:start` | the SCAN DATE as ISO string (i.e. yesterday for a default run) e.g. `"2026-04-18"` — NOT today's run date |
-| `Job URL` | URL string if available |
-| `Gmail Thread URL` | `https://mail.google.com/mail/u/0/#all/[threadId]` if from Gmail |
+| `Job URL` | URL string extracted from the alert email. Save as-is including tracking/redirect params (e.g. Cadremploi `offreId=` URLs, Indeed short links) — exact URL matters less than having something. Leave blank only if no URL is present in the email. |
+| `Gmail Thread URL` | `https://mail.google.com/mail/u/0/#all/[threadId]` — **always populate**; all alerts come via Gmail so this is always available. Never leave blank. |
 | `Red Flags` | JSON array string e.g. `"[\"Low salary\"]"` — from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope`, `Off-topic` |
 | `Missing Info` | JSON array string e.g. `"[\"Salary\", \"Hybrid policy\"]"` — from: `Salary`, `Hybrid policy`, `Scope`, `Full JD`, `Company name`. Populate when rescue gate applied |
 | `Alert Keyword` | The alert search term extracted from the email subject (e.g. `"Directeur Financier"`, `"FP&A Grenoble"`) |
