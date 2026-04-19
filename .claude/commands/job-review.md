@@ -122,6 +122,7 @@ Properties to write (carry forward all fields from the Review Queue row, update 
 | `Alert Keyword` | from Review Queue row |
 | `Notes` | rewritten — strip `QUEUED:` prefix, replace with final 2–3 sentence analysis |
 | `English` | `"__YES__"` or `"__NO__"` based on enriched data |
+| `Job Description` | full extracted JD text (from enrichment or manual paste) — truncate to ~4000 chars if needed, keep structured content (responsibilities, requirements, salary) |
 
 **Priority → Status mapping:**
 - Priority A → `Status: To Apply`

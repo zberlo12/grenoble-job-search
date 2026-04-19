@@ -334,6 +334,7 @@ Properties (SQLite format):
 | `Alert Keyword` | The alert search term extracted from the email subject (e.g. `"Directeur Financier"`, `"FP&A Grenoble"`) |
 | `Notes` | 2–3 sentence analysis; if rescue gate applied, start with `"QUEUED:"`; if dismissed, start with `"Auto-dismissed: [reason]"` |
 | `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` (main DB only — not in Review Queue schema) |
+| `Job Description` | Full JD text extracted from the email or job fetch (rungs 1/2 above). Truncate to ~4000 chars if needed — keep responsibilities, requirements, salary, contract type. Leave blank only if no JD text was obtainable. |
 
 **Action field (Review Queue only):** The Review Queue title field is named `Action`, not `Job Title`. Set it to: `"[Status] — [Job Title] @ [Company]"` (e.g. `"Needs Info — Controller @ Jobgether"`). Also set `Job Title` separately.
 

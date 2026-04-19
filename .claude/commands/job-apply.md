@@ -63,7 +63,12 @@ If the queue is empty, say "No roles in To Apply status — run `/job-review-wee
 
 **Search string** → `notion-search` in the Job Applications DB, filter results to `Status = "To Apply"`, use the best match.
 
-After identifying the row, fetch it fully. Extract: Job Title, Company, Location, Salary, CV Approach, Priority, Red Flags, Notes, Job URL, Docs URL.
+After identifying the row, fetch it fully. Extract: Job Title, Company, Location, Salary, CV Approach, Priority, Red Flags, Notes, Job URL, Docs URL, Job Description.
+
+**Job Description check:** If `Job Description` is empty or blank:
+> "The Job Description field is empty for this role — paste the full JD now and I'll save it before drafting."
+> Wait for the paste. Once received, write it to the row via `notion-update-page` (`Job Description` field), then continue.
+> Do NOT proceed to Step 1b without a Job Description.
 
 **Existing docs check:** If `Docs URL` is already set, tell Zack:
 > "Documents were already drafted for this role ([Docs URL]). Draft again and create a new version, or open the existing page?"
