@@ -1,7 +1,7 @@
 ---
 description: Drain the Review Queue — enriches Needs Info rows (auto-fetch + manual paste), then presents To Assess rows for confirm/override. Reads from the dedicated Review Queue DB (not the main Job Applications DB). Writes resolved rows to the main DB and deletes them from the queue. Trigger with /job-review.
 argument-hint: Optional — pass a row count limit (e.g. "5") to process only the N oldest queued listings
-allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__gmail_read_thread, WebFetch
+allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Gmail__get_thread, WebFetch, Bash
 ---
 
 # Job Review Queue Drainer
@@ -129,15 +129,25 @@ Properties to write (carry forward all fields from the Review Queue row, update 
 - Priority C → `Status: Dismissed`
 - Skip → `Status: Dismissed`
 
-**4b — Delete from Review Queue:**
-Call `mcp__claude_ai_Notion__notion-update-page` on the Review Queue row ID with:
-- `Status` → set to any value that marks it done (use `"Dismissed"` as a sentinel — the Review Queue only has Needs Info / To Assess options, so just update the Notes field to mark it resolved)
+**4b — Archive (delete) from Review Queue:**
 
-Actually: since the Review Queue doesn't have a "Done" status option, update the row's Notes to append `" | Resolved 2026-XX-XX → [final Status in main DB]"`. This keeps the row visible for audit but marks it clearly resolved. You can also just leave it — the main job is to write it to the main DB. The Review Queue will be re-evaluated on each /job-review run based on Status, so if you want to truly remove it, you'd need to delete it — but since deletion isn't supported via MCP, mark Notes as resolved and instruct the user to archive/delete manually if needed.
+The Review Queue is a strict temp table — processed rows must disappear. Archive the row immediately after writing to the main DB.
 
-**Simpler approach:** After writing to main DB, update the Review Queue row's `Status` field. Since the only options are "Needs Info" and "To Assess", leave Status unchanged but update Notes to `"[RESOLVED → main DB]"`. The queue will shrink over time as rows are resolved and the daily scan stops adding to those spots.
+**Step 1 — Try MCP archive:**
+Call `mcp__claude_ai_Notion__notion-update-page` on the Review Queue row with `archived: true` (if the tool supports it). If successful, the row disappears from the DB.
 
-**Practical instruction:** For now, focus on creating the main DB entry. Then update the Review Queue row's Notes to mark it resolved. The user will see the queue shrink in /job-morning counts.
+**Step 2 — Fallback: curl directly to Notion API:**
+If MCP does not support archiving, read the Notion API token from `.mcp.json` at the repo root (`C:\Users\zberl\OneDrive\Documents\Code\Grenoble-job-search\.mcp.json`, key: `NOTION_TOKEN` or equivalent), then run:
+```bash
+curl -s -X PATCH "https://api.notion.com/v1/pages/[ROW_ID]" \
+  -H "Authorization: Bearer [TOKEN]" \
+  -H "Notion-Version: 2022-06-28" \
+  -H "Content-Type: application/json" \
+  -d '{"archived": true}'
+```
+A successful response has `"archived": true` in the JSON. If the curl also fails, note it in the session summary and tell the user to manually archive the row in Notion — but do NOT leave Notes-based markers as a substitute.
+
+Do not leave any row in the Review Queue with a "resolved" marker. Either the row is gone or it's genuinely still pending.
 
 ---
 
@@ -220,6 +230,28 @@ If enriched data reveals a clear disqualifier (Paris on-site, salary stated belo
 ### Notable finds
 [Any Priority A promotions worth flagging]
 ```
+
+---
+
+## Step 9 — France Travail Log entry
+
+After the final summary, silently create one FT Log entry to record the time spent reviewing listings.
+
+Fetch `france_travail_log_db_id` from profile Section 7. If missing, skip this step entirely.
+
+Call `mcp__claude_ai_Notion__notion-create-pages` on the FT Log DB:
+
+| Field | Value |
+|---|---|
+| `Action` (title) | `Revue de [total N] offres — [X] retenues, [Y] rejetées` |
+| `Catégorie` | `Recherche en ligne` |
+| `Priorité` | `Optionnel` |
+| `date:Date:start` | today's date |
+| `Statut déclaration` | `À déclarer` |
+| `Source` | `Manuel` |
+| `Notes` | `Revue /job-review : [A Needs Info] Needs Info + [B To Assess] To Assess traités` |
+
+Confirm with one line: `📋 FT Log : revue de listings enregistrée (Optionnel — À déclarer).`
 
 ---
 
