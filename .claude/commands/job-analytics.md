@@ -127,13 +127,9 @@ From Query 3 results.
 ### Zone breakdown (window rows)
 Derive zone from Location field using location_zones from config. Count: Green / Yellow / Orange / Red / Remote.
 
-### Market visibility (window rows — includes Dismissed)
-- Total found = all window rows
-- Pursued = rows where Status ≠ "Dismissed"
-- Dismissed = rows where Status = "Dismissed"
-- Pass rate = Pursued / Total × 100%
-
-Top dismiss reasons: count red_flags values on Dismissed rows in window. Show top 4.
+### Pass rate and dismiss reasons (window rows — computed from Volume data)
+- Pass rate = Pursued / Total × 100%  (add to Volume output line)
+- Top dismiss reasons = count red_flags values on all Dismissed rows in window. Show top 3. Add under Volume section.
 
 ### Alert performance
 From Query 4 and Query 5 results. For each keyword:
@@ -149,16 +145,21 @@ From Query 4 and Query 5 results. For each keyword:
 ```
 ## Job Search Analytics — Last [N] days  ([start] to [today])
 
-### Volume
-[N] listings found  ·  [N] written to pipeline  ·  [N] dismissed/skipped
+### Volume (last [N] days)
+[N] listings found  ·  [N] pursued ([N]%)  ·  [N] dismissed ([N]%)
 
 Sources:  LinkedIn [N]  ·  Indeed [N]  ·  Direct [N]  ·  Other [N]
-Priority: A [N]  ·  B [N]  ·  C [N]  ·  Needs Info [N]  ·  Dismissed [N]
+Priority: A [N]  ·  B [N]  ·  C [N]  ·  Needs Info [N]  ·  Unranked [N]
 
-### Pipeline (current state — all time)
+Top dismiss reasons:
+1. [flag] — [N]
+2. [flag] — [N]
+3. [flag] — [N]
+
+### Pipeline (active — all time)
 Needs Info [N]  →  To Assess [N]  →  Potentially Apply [N]  →  To Apply [N]
 →  Docs Ready [N]  →  Applied [N]  →  Interview [N]  →  Offer [N]
-Rejected [N]  ·  Dismissed [N]
+On Hold [N]
 
 ### Conversion
 Application rate:  [N]%
@@ -167,21 +168,8 @@ Interview rate:    [N]%
 Avg days to apply:    [N]
 Avg days to response: [N]
 
-### Top Red Flags (last [N] days)
-1. [flag] — [N] listings
-2. [flag] — [N] listings
-3. [flag] — [N] listings
-
 ### By Zone (last [N] days)
 Green [N]  ·  Yellow [N]  ·  Orange [N]  ·  Red [N]  ·  Remote [N]
-
-### Market Visibility (last [N] days)
-[N] listings found  ·  [N] pursued ([N]%)  ·  [N] dismissed ([N]%)
-
-Top dismiss reasons:
-1. [flag] — [N]
-2. [flag] — [N]
-3. [flag] — [N]
 
 ### Alert Performance (last [N] days)
 | Alert Keyword | Found | Pursued | Pass rate | Top dismiss reasons |
