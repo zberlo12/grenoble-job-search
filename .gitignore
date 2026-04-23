@@ -1,3 +1,6 @@
+# User config — contains personal data and connection strings
+config.json
+
 # Secrets — never commit these
 .env
 .env.*
