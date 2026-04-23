@@ -44,9 +44,11 @@ ORDER BY date_added
 ```
 Pass `[window_days]` as params.
 
-**Query 2 — Pipeline snapshot (all time, both tables):**
+**Query 2 — Pipeline snapshot (active rows only, both tables):**
 ```sql
-SELECT status, count(*)::int AS count FROM job_applications GROUP BY status
+SELECT status, count(*)::int AS count FROM job_applications
+WHERE status NOT IN ('Dismissed', 'Rejected')
+GROUP BY status
 UNION ALL
 SELECT status, count(*)::int AS count FROM review_queue GROUP BY status
 ORDER BY status
@@ -75,6 +77,22 @@ ORDER BY total DESC
 ```
 Pass `[window_days]` as params.
 
+**Query 5 — Dismiss reasons by alert keyword (window):**
+```sql
+SELECT
+  alert_keyword,
+  flag,
+  COUNT(*)::int AS cnt
+FROM job_applications,
+     jsonb_array_elements_text(red_flags) AS flag
+WHERE date_added >= CURRENT_DATE - $1::int
+  AND status = 'Dismissed'
+  AND alert_keyword IS NOT NULL AND alert_keyword != ''
+GROUP BY alert_keyword, flag
+ORDER BY alert_keyword, cnt DESC
+```
+Pass `[window_days]` as params.
+
 ---
 
 ## Step 2 — Compute Metrics
@@ -92,8 +110,8 @@ SELECT COUNT(*)::int AS count FROM review_queue
 WHERE date_added >= CURRENT_DATE - $1::int AND status = 'Needs Info'
 ```
 
-### Pipeline snapshot (all rows, current status)
-Use Query 2 results. Count rows in each status: Needs Info, To Assess (from review_queue) + Potentially Apply, To Apply, Docs Ready, Applied, Interview, Offer, Rejected, Dismissed (from job_applications).
+### Pipeline snapshot (active rows only)
+Use Query 2 results. Count rows in each active status: Needs Info, To Assess (from review_queue) + Potentially Apply, To Apply, Docs Ready, Applied, Interview, Offer, On Hold (from job_applications). Dismissed and Rejected are excluded from this view.
 
 ### Funnel conversion
 - **Application rate** = (Applied+Interview+Offer+Rejected) / (To Apply+Applied+Interview+Offer+Rejected)
@@ -118,7 +136,11 @@ Derive zone from Location field using location_zones from config. Count: Green /
 Top dismiss reasons: count red_flags values on Dismissed rows in window. Show top 4.
 
 ### Alert performance
-From Query 4 results. For each keyword: pass rate = pursued / total.
+From Query 4 and Query 5 results. For each keyword:
+- pass rate = pursued / total
+- dismiss reasons = join Query 5 rows for that keyword, take top 2 by count, format as "Flag (N), Flag (N)"
+- If all rows were pursued (no dismissed): show "—" in dismiss reasons column
+- If pursued = 0: mark pass rate in bold as a problem signal
 
 ---
 
@@ -162,11 +184,11 @@ Top dismiss reasons:
 3. [flag] — [N]
 
 ### Alert Performance (last [N] days)
-| Alert Keyword | Found | Pursued | Pass rate |
-|---|---|---|---|
-| [keyword] | [N] | [N] | [N]% |
+| Alert Keyword | Found | Pursued | Pass rate | Top dismiss reasons |
+|---|---|---|---|---|
+| [keyword] | [N] | [N] | [N]% | [Flag (N), Flag (N)] |
 
-[If any keyword has 0% pass rate: "⚠️ '[keyword]' has 0% pass rate — consider pausing or refining this alert."]
+[If any keyword has 0% pass rate: "⚠️ '[keyword]' — 0% pass rate. Top reasons: [dismiss reasons]. Consider pausing or refining this alert."]
 [If no Alert Keyword data yet: "Alert performance data will appear after the first daily scan runs."]
 
 ### Insight

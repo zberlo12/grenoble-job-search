@@ -46,13 +46,15 @@ SELECT status, count(*)::int AS count FROM review_queue GROUP BY status
 
 Extract counts for: `Needs Info` and `To Assess`.
 
-**C. Pipeline snapshot (Supabase):**
+**C. Pipeline snapshot (Supabase — active only):**
 
 ```sql
-SELECT status, count(*)::int AS count FROM job_applications GROUP BY status
+SELECT status, count(*)::int AS count FROM job_applications
+WHERE status NOT IN ('Dismissed', 'Rejected')
+GROUP BY status
 ```
 
-Collect counts for: Potentially Apply, To Apply, Docs Ready, Applied, Interview, On Hold.
+Collect counts for: Potentially Apply, To Apply, Docs Ready, Applied, Interview, On Hold, Needs Info. Dismissed and Rejected are excluded — they are dead rows and add noise.
 
 ## Step 2 — Output
 
