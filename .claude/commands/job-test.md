@@ -43,12 +43,9 @@ Substitute the actual PG_MODULE path and PG_CONN string from config.json in ever
 
 ## Step 1 — Determine Scan Date
 
-Parse `$ARGUMENTS`:
-- Empty → yesterday
-- `MM/DD/YY` → that date
+Always use **today's date** from the `currentDate` context variable. Ignore `$ARGUMENTS`.
 
 Format as `YYYY-MM-DD` for SQL and `YYYY/MM/DD` for Gmail queries.
-Today's date is in the `currentDate` context variable.
 
 ---
 
