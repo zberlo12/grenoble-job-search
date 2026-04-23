@@ -1,34 +1,58 @@
 ---
 description: Read-only pipeline overview of all open job applications. Groups by status in pipeline order — Needs Info through Offer — with counts, days waiting, and job links. No updates, no prompts. Trigger with /job-dashboard.
 argument-hint: No arguments needed.
-allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch
+allowed-tools: Bash
 ---
 
 # Job Application Dashboard
 
-## Step 0 — Load User Profile
+## Step 0 — Load Config
 
-Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context: **Section 1** (user name), **Section 4** (location zones), **Section 7** (Notion IDs).
-If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user.name` → name
+- `location_zones` → green/yellow/orange/red city lists
+
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ---
 
-You are displaying a read-only pipeline overview of all active job applications for the user (name from profile).
-No updates, no prompts — just a clear picture of where everything stands.
+You are displaying a read-only pipeline overview of all active job applications. No updates, no prompts.
 
 ---
 
 ## Step 1 — Fetch All Open Applications
 
-Search the Job Applications database (data source ID from profile Section 7)
-and retrieve all rows. Filter client-side to keep only these **open** statuses:
+Run two queries:
 
-`Needs Info` · `To Assess` · `Potentially Apply` · `To Apply` · `Docs Ready` · `Applied` · `Interview` · `Offer` · `On Hold`
+**Query 1 — Review Queue (staging):**
+```sql
+SELECT id, job_title, company, location, priority, status, date_added,
+       job_url, gmail_thread_url, red_flags, missing_info, notes, salary, source
+FROM review_queue
+WHERE status IN ('Needs Info', 'To Assess')
+ORDER BY date_added ASC
+```
 
-Exclude: `Dismissed` · `Rejected` (these are closed — not shown)
-
-For each row extract: Job Title, Company, Location, Priority, Status, Date Added, Date Applied, Job URL, Docs URL.
+**Query 2 — Job Applications (main pipeline):**
+```sql
+SELECT id, job_title, company, location, priority, status, date_added,
+       date_applied, job_url, docs_url, gmail_thread_url, red_flags, notes, salary, source
+FROM job_applications
+WHERE status IN ('Potentially Apply', 'To Apply', 'Docs Ready', 'Applied', 'Interview', 'Offer', 'On Hold')
+ORDER BY status, date_added ASC
+```
 
 Today's date comes from the injected `currentDate` context. Use it to compute "days waiting."
 
@@ -36,36 +60,37 @@ Today's date comes from the injected `currentDate` context. Use it to compute "d
 
 ## Step 2 — Display Pipeline Dashboard
 
-Output a header summary, then one section per status group **in pipeline order**.
-Only show groups that have at least one row.
+Output a header summary, then one section per status group **in pipeline order**. Only show groups with at least one row.
 
 ### Table format
 
-All groups use the same base table format (consistent with `/job-review-weekly`):
+All groups use the same base table:
 
 ```
 | # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🟠/🔴/🌐 [city] | [salary or —] | [A/B/C or —] | [flags or —] | [1-line note] | [link](url) or — |
+| 1 | [title] | [company] | 🟢/🟡/🟠/🔴/🌐 [city] | [salary or —] | [A/B/C or —] | [flags or —] | [1-line note · Nd] | [link](url) or — |
 ```
 
 **Additional columns by status:**
 - `Docs Ready`: add `📄 [docs](docs_url)` column after 🔗
-- `Applied` / `Interview` / `Offer`: replace 🔗 with two link columns:
-  - `🔗 JD` → Job URL (the original listing)
-  - `📧 Gmail` → Gmail Thread URL as `[thread](https://mail.google.com/mail/u/0/#all/[threadId])` — show only if Gmail Thread URL is set, otherwise `—`
+- `Applied` / `Interview` / `Offer`: replace 🔗 with two columns:
+  - `🔗 JD` → Job URL
+  - `📧 Gmail` → Gmail Thread URL as `[thread](url)` — show only if set, otherwise `—`
 
-**Zone emoji** (derive from Location field using zone tables from profile Section 4):
-- Green zone cities/departments from profile → 🟢
-- Yellow zone cities/departments from profile → 🟡
-- Orange zone cities/departments from profile → 🟠
-- Red zone cities/departments from profile → 🔴
+**Zone emoji** (derive from Location field using location_zones from config):
+- Green zone cities/departments → 🟢
+- Yellow zone cities/departments → 🟡
+- Orange zone cities/departments → 🟠
+- Red zone cities/departments → 🔴
 - Remote / France → 🌐
 - Unknown → —
 
 **Days column** (append to Notes field as `· [N]d`):
-- `Applied`, `Interview`, `Offer` → days since Date Applied
-- All others → days since Date Added
+- `Applied`, `Interview`, `Offer` → days since date_applied
+- All others → days since date_added
+
+**red_flags** is a JSONB array — display as comma-separated values.
 
 ### Full output structure
 
@@ -77,25 +102,22 @@ All groups use the same base table format (consistent with `/job-review-weekly`)
 ---
 
 ### 🔵 Needs Info ([N])
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
-...
+[table]
 
 ### ⚪ To Assess ([N])
-...
+[table]
 
 ### 🟣 Potentially Apply ([N])
-...
+[table]
 
 ### 🔵 To Apply ([N])
-...
+[table]
 
 ### 🟢 Docs Ready ([N])
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 | 📄 |
-...
+[table with docs column]
 
 ### 🟡 Applied — Awaiting Response ([N])
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 JD | 📧 Gmail |
-...
+[table with JD + Gmail columns]
 
 ### 🟠 Interview ([N])
 [same as Applied]
@@ -112,8 +134,6 @@ All groups use the same base table format (consistent with `/job-review-weekly`)
 ---
 
 ## Step 3 — Closing Line
-
-End with a one-line action prompt based on what's most urgent:
 
 ```
 ---

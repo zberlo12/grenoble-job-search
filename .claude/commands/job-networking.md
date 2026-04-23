@@ -1,28 +1,42 @@
 ---
 description: Track networking contacts and follow-ups for your job search. Shows who needs a follow-up today, logs new conversations, creates Google Calendar reminders, and suggests which contacts to reach out to for specific companies. Trigger with /job-networking.
 argument-hint: Blank (→ show today's follow-up list). Or pass a company or contact name to look up.
-allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Google_Calendar__create_event, mcp__claude_ai_Google_Calendar__list_events
+allowed-tools: mcp__claude_ai_Google_Calendar__create_event, mcp__claude_ai_Google_Calendar__list_events, Bash
 ---
 
 # Networking
 
-## Step 0 — Load User Profile
+## Step 0 — Load Config
 
-Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context: **Section 1** (user name), **Section 7** (Networking Contacts DB ID, Job Applications data source ID).
-If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user.name` → name
 
-If the Networking Contacts DB ID is not yet in the profile, halt:
-"Networking Contacts database not set up yet. Run /job-user-setup (or add the DB to Section 7 of your User Profile & Config page) to enable this skill."
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ---
 
 ## Step 1 — Show today's follow-up list
 
-Fetch the Networking Contacts database (ID from profile Section 7).
-Filter to rows where `Next Follow-up` ≤ today. Sort by Next Follow-up ascending.
+```sql
+SELECT id, name, company, role, last_contact, next_followup, notes
+FROM networking_contacts
+WHERE next_followup <= CURRENT_DATE
+ORDER BY next_followup ASC
+```
 
-If none: say "No follow-ups due today." and proceed to Step 2.
+If no rows: say "No follow-ups due today." and proceed to Step 2.
 If any, show:
 
 ```
@@ -53,19 +67,22 @@ Ask: "Who did you speak with?" (accept name or number from the follow-up list)
 Ask: "What did you discuss? (1–2 sentences)"
 Ask: "When should you follow up again? (e.g. 'in 2 weeks', '15 May', or 'skip')"
 
-Update the Notion row:
-- `Last Contact` → today
-- `Notes` → append: `[today's date]: [conversation note]`
-- `Next Follow-up` → parsed follow-up date (if given)
+Update the row:
+```sql
+UPDATE networking_contacts
+SET last_contact = CURRENT_DATE,
+    notes = COALESCE(notes,'') || E'\n' || $1,
+    next_followup = $2
+WHERE id = $3
+```
+Pass `['[today]: [conversation note]', parsed_date_or_null, row_id]`.
 
-If a follow-up date was given:
-- Create a Google Calendar event via `mcp__claude_ai_Google_Calendar__create_event`:
-  - Title: `Follow up — [Name] @ [Company]`
-  - Date: follow-up date (all-day event)
-  - Description: conversation note from this log entry
-- Confirm: "Logged. Calendar reminder set for [date]."
+If a follow-up date was given, create a Google Calendar event:
+- Title: `Follow up — [Name] @ [Company]`
+- Date: follow-up date (all-day)
+- Description: conversation note
 
-If 'skip': "Logged. No follow-up reminder set."
+Confirm: "Logged. Calendar reminder set for [date]."
 
 ---
 
@@ -79,7 +96,13 @@ Ask for (one at a time):
 5. Any notes about this contact
 6. "When do you want to follow up? (optional)"
 
-Create a new row in Networking Contacts with all fields populated.
+```sql
+INSERT INTO networking_contacts
+(name, company, role, notes, next_followup)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+```
+
 If follow-up date given: also create Google Calendar event.
 Confirm: "Contact added: [Name] @ [Company]."
 
@@ -87,15 +110,26 @@ Confirm: "Contact added: [Name] @ [Company]."
 
 ### Option 3 — Find contacts at a company
 
-Accept a company name.
-Filter Networking Contacts for rows where Company matches (case-insensitive).
-Also search Job Applications DB for any current listings at that company.
+```sql
+SELECT id, name, company, role, last_contact, next_followup, notes
+FROM networking_contacts
+WHERE company ILIKE $1
+ORDER BY last_contact DESC NULLS LAST
+```
+Pass `['%company_name%']`.
+
+Also query job applications:
+```sql
+SELECT id, job_title, status, job_url
+FROM job_applications
+WHERE company ILIKE $1 AND status NOT IN ('Dismissed', 'Rejected')
+ORDER BY date_added DESC
+```
 
 Output:
 ```
 Contacts at [Company]:
 - [Name] — [Role] — last contact: [date] — [warm/not warm]
-- ...
 
 Job listings at [Company]:
 - [Title] — [Status] — [link]
@@ -107,8 +141,14 @@ Suggest: "Consider reaching out to [warmest contact] — last spoke [N] days ago
 
 ### Option 4 — All contacts
 
-Fetch all rows from Networking Contacts. Show full table sorted by Next Follow-up (nulls last):
+```sql
+SELECT id, name, company, role, last_contact, next_followup
+FROM networking_contacts
+ORDER BY next_followup ASC NULLS LAST, last_contact DESC NULLS LAST
+```
+
+Show full table sorted by next follow-up:
 
 ```
-| # | Name | Company | Role | Relationship | Last Contact | Next Follow-up | Warm |
+| # | Name | Company | Role | Last Contact | Next Follow-up |
 ```

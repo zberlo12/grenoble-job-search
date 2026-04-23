@@ -1,37 +1,33 @@
 ---
-description: Draft a tailored CV and cover letter for a specific job application. Fetches the Notion job row and candidate knowledge base, asks targeted questions if anything is missing, then writes tailored CV + cover letter + notes to a new Notion page linked back to the job row. Trigger with /job-apply or when Zack is ready to prepare documents for a listing.
-argument-hint: Blank (→ list all "To Apply" rows to pick from), a number from that list, a Notion row ID, or a company/title search string
+description: Draft a tailored CV and cover letter for a specific job application. Fetches the job row from Supabase and candidate knowledge base from Notion, asks targeted questions if anything is missing, then writes tailored CV + cover letter + notes to a new Notion page linked back to the job row. Trigger with /job-apply or when Zack is ready to prepare documents for a listing.
+argument-hint: Blank (→ list all "To Apply" rows to pick from), a number from that list, or a company/title search string
 allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Google_Drive__list_recent_files, mcp__claude_ai_Google_Drive__search_files, mcp__claude_ai_Google_Drive__create_file, Bash
 ---
 
 # Job Apply — Document Drafter
 
-## Step 0 — Load User Profile
+## Step 0 — Load Config
 
-Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context: **Section 1** (user name, base location), **Section 7** (all Notion IDs), **Section 8** (CV approach options and script flags).
-If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user.name`, `user.salary_floor_apply` → name, salary floor
+- `notion.candidate_profile_id` → Candidate Profile page ID
+- `notion.cv_templates_id` → CV Templates parent page ID
+- `notion.application_docs_id` → Application Documents parent page ID
+- `cv_approaches` → CV approach options and flags
 
-**All Notion IDs below come from profile Section 7** — do not use hardcoded values if profile is loaded.
-
----
-
-You are drafting tailored application documents for the user (name from profile) for a specific
-job listing already ranked in the Notion Job Applications database.
-
-Your goal: produce a tailored CV and a custom cover letter, saved as a Notion page under
-Application Documents, linked back to the job row for future comparison.
-
----
-
-## Notion page IDs (from profile Section 7)
-
-| Resource | Profile Section 7 Key |
-|---|---|
-| Candidate Profile | Candidate Profile page ID |
-| CV Templates (parent) | CV Templates parent ID |
-| Application Documents (parent) | Application Documents parent ID |
-| Job Applications DB | Job Applications data source ID |
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ---
 
@@ -39,133 +35,114 @@ Application Documents, linked back to the job row for future comparison.
 
 Parse `$ARGUMENTS`:
 
-**Blank** → Fetch all rows with `Status = "To Apply"` from the Job Applications DB. Sort by Date Added ascending. Present a numbered comparison table — same format as `/job-review-weekly`:
+**Blank** → Fetch all rows with `Status = 'To Apply'` from job_applications:
+```sql
+SELECT id, job_title, company, location, priority, salary, job_url,
+       notes, red_flags, docs_url, cv_approach
+FROM job_applications
+WHERE status = 'To Apply'
+ORDER BY date_added ASC
+```
 
+Present a numbered comparison table:
 ```
 ## To Apply Queue — [N] roles ready for documents
 
 | # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
 |---|---|---|---|---|---|---|---|---|
 | 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line decision note] | [link](url) or — |
-...
 ```
 
-Then ask:
-> "Which numbers do you want to draft documents for? List them (e.g. `1,3`) or type `all`."
+Ask: > "Which numbers do you want to draft documents for? List them (e.g. `1,3`) or type `all`."
 
-Draft documents for each selected row in order. Skip unselected rows — leave them in `To Apply`.
+Draft documents for each selected row in order. Skip unselected rows.
+If queue is empty: "No roles in To Apply status — run `/job-review-weekly` to promote listings first." and stop.
 
-If the queue is empty, say "No roles in To Apply status — run `/job-review-weekly` to promote listings from Potentially Apply first." and stop.
+**Number** (e.g. `2`) → use the row at that position.
+**Search string** → `SELECT ... WHERE job_title ILIKE $1 OR company ILIKE $1 AND status='To Apply'`
 
-**Number** (e.g. `2`) → use the row at that position from the list above.
+After identifying the row, fetch fully:
+```sql
+SELECT id, job_title, company, location, salary, cv_approach, priority,
+       red_flags, notes, job_url, docs_url, job_description
+FROM job_applications
+WHERE id = $1
+```
 
-**Notion row ID** (UUID format) → fetch that page directly. Confirm it has `Status = "To Apply"` — if not, warn Zack and ask to confirm before proceeding.
-
-**Search string** → `notion-search` in the Job Applications DB, filter results to `Status = "To Apply"`, use the best match.
-
-After identifying the row, fetch it fully. Extract: Job Title, Company, Location, Salary, CV Approach, Priority, Red Flags, Notes, Job URL, Docs URL, Job Description.
-
-**Job Description check:** If `Job Description` is empty or blank:
+**Job Description check:** If `job_description` is empty or blank:
 > "The Job Description field is empty for this role — paste the full JD now and I'll save it before drafting."
-> Wait for the paste. Once received, write it to the row via `notion-update-page` (`Job Description` field), then continue.
-> Do NOT proceed to Step 1b without a Job Description.
+> Wait for the paste. Once received:
+```sql
+UPDATE job_applications SET job_description = $1 WHERE id = $2
+```
+Do NOT proceed to Step 1b without a Job Description.
 
-**Existing docs check:** If `Docs URL` is already set, tell Zack:
-> "Documents were already drafted for this role ([Docs URL]). Draft again and create a new version, or open the existing page?"
-> Wait for confirmation before proceeding.
+**Existing docs check:** If `docs_url` is already set:
+> "Documents were already drafted for this role ([docs_url]). Draft again or open the existing page?"
+> Wait for confirmation.
 
 ---
 
 ## Step 1b — Pre-flight check
 
-Before building any documents, run these five checks against the row data and user profile rules. If the row was already in `To Apply` status it has likely been reviewed, but confirm anyway — circumstances change.
-
 | # | Check | Pass condition |
 |---|---|---|
-| 1 | **Salary** | Salary field ≥ €55K, OR salary not stated (proceed with caution flag) |
-| 2 | **Location** | Location maps to Green or Yellow zone, OR role is confirmed remote/hybrid |
+| 1 | **Salary** | Salary field ≥ salary_floor_apply from config, OR salary not stated |
+| 2 | **Location** | Location maps to Green or Yellow zone, OR role confirmed remote/hybrid |
 | 3 | **Contract type** | CDI — not CDD, intérim, alternance, freelance, or stage |
-| 4 | **No duplicate** | No other row for the same Company with Status = Applied / Docs Ready / Interview / Offer |
+| 4 | **No duplicate** | No other row for same Company with Status = Applied / Docs Ready / Interview / Offer |
 | 5 | **Role level** | Title/scope is not junior, alternance, or clearly below senior level |
 
-**If all five pass:** confirm with `✅ Pre-flight passed — proceeding to document build.` then continue to Step 2.
-
-**If any fail:** display a clear summary:
-
-```
-⚠️ Pre-flight issues found:
-
-  ❌ Salary: stated €42K — below €55K floor
-  ❌ Contract: CDD (12 months)
-  ✅ Location: Grenoble (Green)
-  ✅ No duplicate found
-  ✅ Role level: senior scope
-
-Proceed anyway? [Y/N]
+For check 4, run:
+```sql
+SELECT id FROM job_applications
+WHERE company ILIKE $1
+  AND status IN ('Applied', 'Docs Ready', 'Interview', 'Offer')
+  AND id != $2
 ```
 
-If Zack confirms Y: note the override in the Notion row's Notes field and continue.
-If N: stop. Offer to update the row Status to Dismissed with a reason.
+If all five pass: `✅ Pre-flight passed — proceeding to document build.`
+If any fail: display summary and ask to confirm override. If confirmed, note it and continue. If not, offer to set Status to Dismissed.
 
 ---
 
 ## Step 2 — Load Resources in Parallel
 
-Call all three simultaneously:
+**A. Candidate Knowledge (Notion)**
+`notion-fetch` the Candidate Profile page (ID from config `notion.candidate_profile_id`).
+Extract: metrics, highlights, talking points, Cover Letter Writing Rules. These rules are mandatory constraints on every CL draft.
 
-**A. Candidate Knowledge**
-`notion-fetch` the Candidate Profile page (ID from profile Section 7 — "Candidate Profile page ID"). Extract all populated fields — metrics, highlights, talking points, and critically the **Cover Letter Writing Rules** section. These rules are mandatory constraints on every CL draft.
+**B. Base CV Template (Notion)**
+Detect JD language: French JD → `FR`, English JD → `EN`, bilingual → `FR`.
+Map CV Approach + language to template title: `"CV — [Approach Name] — [LANG]"` (e.g. "CV — FP&A Focus — FR").
 
-**B. Base CV Template**
-Detect JD language first: French JD → `FR`, English JD → `EN`, bilingual → `FR`.
+`notion-search` for that title under CV Templates parent page (`notion.cv_templates_id`), then `notion-fetch` the result.
 
-Map CV Approach + language to template page title using the CV Approach options table from profile Section 8.
-Default template naming pattern: `"CV — [Approach Name] — [LANG]"` (e.g. "CV — FP&A Focus — FR").
-
-`notion-search` for that title under the CV Templates parent page (`3412fc3ca02a819e9d52fe0a393f2d23`), then `notion-fetch` the result.
-
-**Fallback:** If the language-specific page is not found, search again without the language suffix (e.g. "CV — FP&A Focus"). Use that if found. If still not found:
-> "No CV template found for [CV Approach — LANG]. Paste your base CV text and I'll save it to Notion as the template for future use."
-> Create the page under CV Templates using `notion-create-pages` + `notion-update-page` to write the content. Use the language-tagged title (e.g. "CV — FP&A Focus — FR"). Confirm saved, then continue.
+**Fallback:** If language-specific page not found, search without language suffix. If still not found, ask to paste base CV text.
 
 **C. CL Examples (style reference)**
-`notion-search` for pages under the CV Templates parent that contain "CL" or "Example" in the title. Fetch up to 3. Use for tone, structure, and framing only — do not copy content.
+`notion-search` for pages under CV Templates parent containing "CL" or "Example" in the title. Fetch up to 3. Use for tone, structure, and framing only — do not copy content.
 
 ---
 
 ## Step 3 — Pre-draft Questions (upfront, never mid-draft)
 
-Before writing a single word of the CV, check the Candidate Profile and job requirements together. Identify any gaps that would meaningfully affect the document quality — e.g.:
-
-- Role requires team management → team size not in Candidate Profile
-- Industrial sector role → specific industrial company/context not recorded
-- Salary negotiation likely → expected salary not recorded
-- French-language role → French level not recorded
-
-Ask ALL missing questions in **one single block** — never interrupt mid-draft. Format:
+Check Candidate Profile and job requirements together. If any meaningful gaps:
 
 > "Before I draft, I need a few details not yet in your profile:
 > 1. [Question]
-> 2. [Question]
-> (If any don't apply, just say 'N/A' for that number.)"
+> (If any don't apply, just say 'N/A')"
 
-After receiving answers, append them to the Candidate Profile page using `notion-update-page` with `command: "insert_content_after"` targeting the relevant section. Then proceed to draft.
-
-If nothing is missing, skip directly to Step 4.
+Ask ALL in one block. After receiving answers, append to Candidate Profile page via `notion-update-page`.
 
 ---
 
 ## Step 4 — Draft the Tailored CV
 
-Using the base CV template, candidate profile, and job details:
-
-1. **Craft the CV headline/title** — do NOT copy the job title verbatim. Create a compelling, sector-appropriate variant that positions Zack for this specific role (e.g. for an industrial controlling role: "Contrôleur de Gestion Industriel | FP&A & Performance Opérationnelle"). Look at the CL examples to understand how Zack has framed his profile in past successful applications — match that style and ambition.
-
-2. **Professional summary** — 2–3 sentences. Reference the company type, sector, and role level. Lead with the most relevant experience for this JD. Concrete, not generic.
-
-3. **Experience bullet points** — reorder and reweight existing bullets to surface the most relevant experience for this role. Do not invent content — reframe and reprioritise what is in the base template. Incorporate key JD terms naturally where they genuinely apply.
-
-4. **Language** — match the language of the JD (French JD → French CV; bilingual JD → French CV with English profile section if appropriate).
+1. **Craft the CV headline** — do NOT copy the job title verbatim. Create a compelling, sector-appropriate variant.
+2. **Professional summary** — 2–3 sentences. Reference company type, sector, role level. Concrete, not generic.
+3. **Experience bullet points** — reorder and reweight existing bullets. Do not invent content.
+4. **Language** — match the JD language.
 
 ---
 
@@ -173,31 +150,29 @@ Using the base CV template, candidate profile, and job details:
 
 Always drafted from scratch — never recycled or generic.
 
-Structure:
-1. **Opening** (2–3 sentences): Why this specific company and role. Reference something concrete — sector challenge, recent news, what makes the company interesting to Zack. Not "I am interested in this opportunity."
-2. **Body** (2 short paragraphs): Map 2–3 specific examples from Zack's background to the JD's key requirements. Name the company, scope, and result. Concrete beats vague every time.
-3. **Close** (2 sentences): Proactive, not passive. Express interest in a conversation, not just "awaiting your response."
+1. **Opening** (2–3 sentences): Why this specific company and role. Reference something concrete.
+2. **Body** (2 short paragraphs): Map 2–3 specific examples to the JD's key requirements. Name company, scope, and result.
+3. **Close** (2 sentences): Proactive, not passive.
 
-Language: match the JD. Tone: confident and direct, not obsequious.
+Language: match the JD. Tone: confident and direct.
 
 ---
 
 ## Step 6 — Create Application Document Page in Notion
 
-Call `notion-create-pages` under the Application Documents parent (`3412fc3ca02a813a8315fb6fd0a2304e`):
-
+Call `notion-create-pages` under Application Documents parent (`notion.application_docs_id`):
 ```
 Title: [Company] — [Job Title] — [YYYY-MM-DD]
 ```
 
-Then call `notion-update-page` to write the full content with three sections.
+Then call `notion-update-page` to write the full content.
 
 **IMPORTANT: Always use these exact English heading names — the Word populate scripts look for them by name:**
 
 ```markdown
 ## Tailored CV
 
-[full tailored CV — content may be in French or English matching the JD]
+[full tailored CV]
 
 ---
 
@@ -212,10 +187,9 @@ Then call `notion-update-page` to write the full content with three sections.
 [closing paragraph]
 
 **CRITICAL — Cover Letter section rules (the Word script maps paragraphs sequentially):**
-- Include ONLY the body paragraphs — no name, no sub-headline, no contact info, no date, no
-  company address, no "Objet:" line, no "Madame/Monsieur", no "Cordialement/Zachary Berlo"
-- All those elements are already in the Word template; adding them here duplicates them
-- 4 paragraphs is the standard: opening · body1 · body2 · closing
+- Include ONLY the body paragraphs — no name, no sub-headline, no contact info, no date,
+  no company address, no "Objet:" line, no "Madame/Monsieur", no "Cordialement/Zachary Berlo"
+- 4 paragraphs standard: opening · body1 · body2 · closing
 - Each paragraph on its own line with a blank line between
 
 ---
@@ -239,27 +213,28 @@ Then call `notion-update-page` to write the full content with three sections.
 - [e.g. "Salary not confirmed — raise at offer stage, not before"]
 
 ### Before submitting
-- [ ] Verify company address in CL header — script uses city + dept + France (e.g. "Saint-Égrève (38), France"). If you need the full street address, update the Word file manually before sending.
+- [ ] Verify company address in CL header
 - [ ] [other checks — hybrid policy, hiring manager name, etc.]
 ```
 
 ---
 
-## Step 7 — Update Job Applications Row
+## Step 7 — Update Supabase Row
 
-Call `notion-update-page` on the job row with:
-- `Status` → `Docs Ready` (documents created, not yet submitted — Zack confirms actual submission via `/job-status`)
-- `Docs URL` → the URL of the new application document page
-- `Notes` → append `" | Docs drafted [YYYY-MM-DD]"` to existing notes
+```sql
+UPDATE job_applications
+SET status = 'Docs Ready',
+    docs_url = $1,
+    notes = COALESCE(notes,'') || $2
+WHERE id = $3
+```
+Pass `[notion_page_url, ' | Docs drafted ' || today_date, row_id]`.
 
 ---
 
 ## Step 8 — Run Word Populate Scripts
 
-Immediately after Step 7, run both scripts via Bash from the repo root
-(`C:\Users\zberl\OneDrive\Documents\Code\Grenoble-job-search`).
-
-**Map CV Approach + language to `--approach` flag:**
+Run both scripts via Bash from the repo root:
 
 | CV Approach | Language | --approach flag |
 |---|---|---|
@@ -269,36 +244,21 @@ Immediately after Step 7, run both scripts via Bash from the repo root
 | Standard / RAF | FR | `raf-fr` |
 | Transformation Focus | EN | `hof-en` |
 
-Run both commands sequentially:
-
 ```bash
 py scripts/populate_cv.py [PAGE_ID] --approach [FLAG]
 py scripts/populate_cl.py [PAGE_ID]
 ```
 
-Replace `[PAGE_ID]` with the Notion page ID from Step 6 and `[FLAG]` with the mapped approach above.
-
-If either script fails, report the error message and stop — do not proceed to Step 9.
-
-The Word files are saved to the `outputs/` folder in the repo root.
+Replace `[PAGE_ID]` with the Notion page ID from Step 6 and `[FLAG]` with the mapped approach.
+If either script fails, report the error and stop.
 
 ---
 
-## Step 8b — Upload to Google Drive (optional, if connected)
+## Step 8b — Upload to Google Drive (optional)
 
-After the Word files are generated:
-
-1. Attempt `mcp__claude_ai_Google_Drive__list_recent_files` to check if Drive is connected.
-   If the call fails, skip this step silently and proceed to Step 9.
-
-2. If Drive is available:
-   - Search for a folder named "Job Applications" using `mcp__claude_ai_Google_Drive__search_files`.
-     If not found, create it with `mcp__claude_ai_Google_Drive__create_file` (mimeType: folder).
-   - Upload the CV .docx and CL .docx using `mcp__claude_ai_Google_Drive__create_file`.
-   - Get the shareable links for both files.
-
-3. Update the Notion job row (call `mcp__claude_ai_Notion__notion-update-page`):
-   - Append to Notes: `" | Docs: [CV Drive link] / [CL Drive link]"`
+1. Try `mcp__claude_ai_Google_Drive__list_recent_files`. If fails, skip silently.
+2. If Drive available: search for "Job Applications" folder, upload CV+CL .docx files.
+3. Update Supabase notes: `UPDATE job_applications SET notes=notes||' | Drive: [links]' WHERE id=$1`
 
 ---
 
@@ -313,15 +273,12 @@ Documents drafted for [Job Title] @ [Company]:
 📝 Word files:
    └── Local: outputs/[CV filename]
    └── Local: outputs/[CL filename]
-   [if Drive connected:]
-   └── Drive: [CV link]
-   └── Drive: [CL link]
 
 🔗 Job posting: [Job URL — for ChatGPT writing review against JD]
 
 Next steps:
 1. Open the Word files — review CV headline and LM opener first.
 2. Paste the JD link above into ChatGPT to cross-check writing against requirements.
-3. Review the Application Notes in Notion for anything to verify before submitting.
+3. Review the Application Notes for anything to verify before submitting.
 4. When submitted, run /job-status to mark as Applied.
 ```

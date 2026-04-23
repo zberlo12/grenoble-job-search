@@ -1,40 +1,58 @@
 ---
 description: Morning digest — shows what last night's scan found and the current pipeline state. Run this first every session before /job-review or /job-apply. Trigger with /job-morning.
 argument-hint: blank
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search
+allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, Bash
 ---
 
-## Step 0 — Load config
+## Step 0 — Load Config
 
-Fetch User Profile page `3452fc3ca02a811ab75af9805f50ef8b`. Extract from Section 7:
-- `job_applications_db_id` (data source ID for Job Applications DB)
-- `review_queue_data_source_id` (data source ID for Review Queue DB)
-- `daily_scans_archive_page_id` (parent page for scan subpages)
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `notion.daily_scans_archive` → Daily Scans archive page ID
+
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ## Step 1 — Read last night's scan
 
 Run all three data fetches in parallel:
 
-**A. Scan subpage:**
+**A. Scan subpage (Notion — stays as archive):**
 
-The daily scan runs each morning and processes **yesterday's** emails — so the subpage is always titled with yesterday's date. Use `notion-search` to find a page titled exactly "Job Alert Scan — [yesterday's date in YYYY-MM-DD format]" under the Daily Scans archive page. If found, fetch it and read the digest content to extract:
+Use `notion-search` to find a page titled exactly "Job Alert Scan — [yesterday's date in YYYY-MM-DD format]" under the Daily Scans archive page (ID from config `notion.daily_scans_archive`). If found, fetch it and read the digest content to extract:
 - Total new listings found
 - Counts by Status: Potentially Apply, Needs Info, To Assess, Dismissed
 
-Also search for "Job Alert Scan — [two days ago]" in case the scan ran for an earlier date. If found, use it and note the date.
+Also search for "Job Alert Scan — [two days ago]" as a fallback.
 
-If no subpage exists for yesterday or the day before: set all scan counts to "?" and add a warning:
-`⚠️ No scan subpage found for today or yesterday — the nightly scan may have failed. Check the Daily Scans archive in Notion or run /job-search-daily-scan manually.`
+If no subpage exists: set all scan counts to "?" and add a warning:
+`⚠️ No scan subpage found for today or yesterday — the nightly scan may have failed. Run /job-search-daily-scan manually.`
 
-**B. Review Queue counts:**
+**B. Review Queue counts (Supabase):**
 
-Call `notion-fetch` on the Review Queue data source (`review_queue_data_source_id` from profile Section 7). Count rows by Status:
-- `Needs Info` → needs enrichment before ranking
-- `To Assess` → already ranked, awaiting confirm/override
+```sql
+SELECT status, count(*)::int AS count FROM review_queue GROUP BY status
+```
 
-**C. Pipeline snapshot:**
+Extract counts for: `Needs Info` and `To Assess`.
 
-Use `notion-search` against the Job Applications DB (data source ID from profile Section 7) to get counts per Status. Query each active status: Potentially Apply, To Apply, Docs Ready, Applied, Interview, On Hold. Sum these for the Active total. (Dismissed, Rejected, Offer are excluded from active total.)
+**C. Pipeline snapshot (Supabase):**
+
+```sql
+SELECT status, count(*)::int AS count FROM job_applications GROUP BY status
+```
+
+Collect counts for: Potentially Apply, To Apply, Docs Ready, Applied, Interview, On Hold.
 
 ## Step 2 — Output
 
@@ -78,8 +96,6 @@ SUGGESTED NEXT STEP
 ```
 
 If no scan subpage was found, show the ⚠️ warning in the LAST NIGHT'S SCAN section and still show the Review Queue and pipeline snapshot.
-
-If the Review Queue fetch fails or returns no data, show `Review Queue: (unavailable)` and continue.
 
 The suggested next step should be the single most impactful action:
 - Review Queue total > 0 → `/job-review` (takes priority over everything else)

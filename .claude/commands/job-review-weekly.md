@@ -1,35 +1,49 @@
 ---
 description: End-of-week comparison of all "Potentially Apply" listings. Fetches the holding queue, presents a ranked comparison table, and lets Zack select which listings to commit to (→ To Apply) vs. dismiss. Trigger with /job-review-weekly.
 argument-hint: No arguments needed.
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page
+allowed-tools: Bash
 ---
 
 # Weekly Job Review
 
-## Step 0 — Load User Profile
+## Step 0 — Load Config
 
-Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context: **Section 1** (user name), **Section 7** (Notion IDs — Job Applications data source ID).
-If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user.name` → name
+
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ---
 
-You are helping the user (name from profile) make final apply decisions on the week's "Potentially Apply"
-listings. These are Priority B listings that passed the quality bar but haven't been committed to yet.
-
-Your goal: present a clear comparison of all candidates, let the user choose which ones to
-actually pursue, and update Notion accordingly.
+You are helping the user make final apply decisions on the week's "Potentially Apply" listings.
 
 ---
 
 ## Step 1 — Fetch the Holding Queue
 
-Call `mcp__claude_ai_Notion__notion-fetch` on the Job Applications data source (ID from profile Section 7).
+```sql
+SELECT id, job_title, company, location, priority, status, date_added,
+       job_url, notes, salary, red_flags
+FROM job_applications
+WHERE status = 'Potentially Apply'
+ORDER BY
+  CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
+  date_added ASC
+```
 
-Filter client-side to `Status = "Potentially Apply"`. Sort: Priority A first (if any slipped
-through), then B; within each group, oldest Date Added first.
-
-If the queue is empty, say "Nothing in the Potentially Apply queue — nothing to review" and stop.
+If no rows returned, say "Nothing in the Potentially Apply queue — nothing to review" and stop.
 
 ---
 
@@ -42,14 +56,13 @@ Output a numbered comparison table:
 
 | # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line summary] | [URL or —] |
-| 2 | ... | ... | ... | ... | ... | ... | ... | ... |
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line summary] | [link](url) or — |
 ...
 ```
 
-Keep the Notes column to one short line — the decision-relevant point only (e.g. "RAF scope,
-French-only, salary unknown" or "FP&A at international pharma, hybrid confirmed").
-The 🔗 column should contain the Job URL from Notion as a markdown link `[link](url)`, or `—` if none stored.
+Keep the Notes column to one short line — the decision-relevant point only.
+The 🔗 column should contain the Job URL as a markdown link `[link](url)`, or `—` if none stored.
+`red_flags` is a JSONB array — display as comma-separated values.
 
 ---
 
@@ -59,7 +72,7 @@ Ask:
 > "Which numbers do you want to move to **To Apply**? List them (e.g. `1,3`) or type `all` / `none`.
 > The rest will be dismissed unless you type `hold` to leave them in Potentially Apply."
 
-Wait for Zack's response. Parse:
+Wait for response. Parse:
 - Numbers (e.g. `1,3,5`) → those rows → `Status: To Apply`
 - `all` → every row → `Status: To Apply`
 - `none` → no rows promoted
@@ -68,11 +81,21 @@ Wait for Zack's response. Parse:
 
 ---
 
-## Step 4 — Update Notion
+## Step 4 — Update Supabase
 
-For each row in the selection: call `mcp__claude_ai_Notion__notion-update-page` with `Status: To Apply`.
-For each dismissed row: `Status: Dismissed`.
-For any held rows: leave `Status: Potentially Apply` unchanged.
+For each status change, run an UPDATE. For **To Apply**:
+```sql
+UPDATE job_applications SET status = 'To Apply' WHERE id = $1
+```
+
+For **Dismissed**:
+```sql
+UPDATE job_applications SET status = 'Dismissed' WHERE id = $1
+```
+
+For held rows: no update needed (leave as Potentially Apply).
+
+Run all updates sequentially. Confirm each with the returned row count.
 
 ---
 

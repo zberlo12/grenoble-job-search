@@ -1,7 +1,7 @@
 ---
-description: Log and report job search actions for France Travail compliance. Auto-syncs from Job Applications and Networking DBs, allows manual entries, and generates audit-ready reports tiered by reporting priority. Trigger with /job-france-travail or when Zack wants to log or review actions for France Travail / Pôle Emploi.
+description: Log and report job search actions for France Travail compliance. Auto-syncs from Job Applications and Networking DBs (Supabase), allows manual entries, and generates audit-ready reports tiered by reporting priority. Trigger with /job-france-travail or when Zack wants to log or review actions for France Travail / Pôle Emploi.
 argument-hint: "add | sync | report | blank for interactive menu"
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-create-database, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Gmail__create_draft
+allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Gmail__create_draft, Bash
 ---
 
 ## Purpose
@@ -10,39 +10,25 @@ Maintain an audit-ready log of all job search actions for France Travail complia
 
 ---
 
-## Step 0 — Load user config
+## Step 0 — Load Config
 
-Fetch the User Profile & Config page:
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user.name` → name
+- `user.email` → email
+
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
 ```
-notion-fetch page_id="3452fc3ca02a811ab75af9805f50ef8b"
-```
-
-Extract from Section 7 (Notion IDs):
-- `job_applications_db_id`
-- `networking_contacts_db_id`
-- `france_travail_log_db_id` (may not exist yet — handle below)
-- `job_search_root_page_id` (parent for new DB)
-
-**If `france_travail_log_db_id` is missing or blank:**
-
-Create the France Travail Log database as a child of the job search root page with these properties:
-- **Action** (title) — auto-generated description
-- **Date** (date)
-- **Catégorie** (select): Candidature / Entretien / Contact recruteur / Contact réseau / Suivi candidature / Formation / Événement / France Travail / CV · Profil / Administratif / Présélection / Autre
-- **Priorité** (select): Obligatoire / Impactant / Optionnel
-- **Entreprise · Organisme** (rich_text)
-- **Poste · Sujet** (rich_text)
-- **Mode** (select): Email / Téléphone / Visio / Présentiel / En ligne / Courrier
-- **Source** (select): Auto-Candidatures / Auto-Réseau / Manuel
-- **Statut déclaration** (select): À déclarer / Déclaré / Exclu
-- **Notes** (rich_text)
-
-**Statut déclaration values:**
-- `À déclarer` — logged but not yet entered into France Travail (default for all new entries)
-- `Déclaré` — confirmed entered into France Travail portal/declaration
-- `Exclu` — deliberately not reported (e.g. optionnel actions Zack chose to skip), but kept in full history for audit backup
-
-After creating the DB, write its ID back to Section 7 of the User Profile & Config page under the label `france_travail_log_db_id`. Confirm to the user that the database has been initialised.
 
 ---
 
@@ -70,46 +56,71 @@ If `$ARGUMENTS` is `add`, `sync`, `report`, or `stats`, go directly to that step
 
 ## Step 2a — Sync mode
 
-Pull from both source databases and create missing France Travail Log entries.
+Pull from both source tables and create missing France Travail Log entries.
 
-### From Job Applications DB
+### From job_applications
 
-Fetch all rows from `job_applications_db_id`. For each row, apply this mapping:
+```sql
+SELECT id, job_title, company, status, date_applied, date_added, date_response, notes, job_url
+FROM job_applications
+WHERE status IN ('Docs Ready','Applied','Interview','Offer','Rejected')
+ORDER BY COALESCE(date_applied, date_added) ASC
+```
+
+For each row, apply this mapping:
 
 | Job Application status | FT action to create | Catégorie | Priorité | Date to use |
 |---|---|---|---|---|
-| Docs Ready | Candidature | Candidature | Obligatoire | Date Applied (or Date Added if blank) |
-| Applied | Candidature | Candidature | Obligatoire | Date Applied |
-| Interview | Candidature + Entretien | Candidature / Entretien | Obligatoire | Candidature: Date Applied — Entretien: Date Response (or best date from Notes) |
-| Offer | Candidature + Entretien | Candidature / Entretien | Obligatoire | Candidature: Date Applied — Entretien: Date Response |
-| Rejected (Date Applied set) | Candidature | Candidature | Obligatoire | Date Applied — these are real submissions and count as job search actions |
-| Rejected (no Date Applied) | — | — | — | Skip — never submitted |
+| Docs Ready | Candidature | Candidature | Obligatoire | date_applied or date_added |
+| Applied | Candidature | Candidature | Obligatoire | date_applied |
+| Interview | Candidature + Entretien | Candidature / Entretien | Obligatoire | Candidature: date_applied — Entretien: date_response or best date from notes |
+| Offer | Candidature + Entretien | Candidature / Entretien | Obligatoire | Candidature: date_applied — Entretien: date_response |
+| Rejected (date_applied set) | Candidature | Candidature | Obligatoire | date_applied — real submissions count |
+| Rejected (no date_applied) | — | — | — | Skip — never submitted |
 
-Action title format: `Candidature — [Job Title] @ [Company]` or `Entretien — [Job Title] @ [Company]`
+Action title format: `Candidature — [job_title] @ [company]` or `Entretien — [job_title] @ [company]`
 
-For an Interview row, also create the Candidature entry if Date Applied is set and no candidature entry already exists.
+Source: `Auto-Candidatures`. Job URL carried forward from job_applications.
 
-Source: `Auto-Candidatures`
+### From networking_contacts
 
-### From Networking Contacts DB
+```sql
+SELECT id, name, company, role, last_contact, notes
+FROM networking_contacts
+WHERE last_contact IS NOT NULL
+ORDER BY last_contact DESC
+```
 
-Fetch all rows from `networking_contacts_db_id`. For each row with a Last Contact date set:
-- Action title: `Contact réseau — [Name] @ [Company]`
-- Catégorie: Contact réseau
-- Priorité: Impactant
-- Date: Last Contact date
-- Source: Auto-Réseau
+For each row:
+- Action title: `Contact réseau — [name] @ [company]`
+- Catégorie: `Contact réseau`
+- Priorité: `Impactant`
+- Date: last_contact
+- Source: `Auto-Réseau`
 
-All new entries created by sync default to **Statut déclaration = À déclarer**.
+### Deduplication (before each INSERT)
 
-### Deduplication
+```sql
+SELECT id FROM france_travail_log
+WHERE entreprise ILIKE $1
+  AND categorie = $2
+  AND date BETWEEN $3::date - INTERVAL '1 day' AND $3::date + INTERVAL '1 day'
+```
 
-Before creating each entry, search the FT Log for an existing entry where:
-- Entreprise matches (case-insensitive), AND
-- Catégorie matches, AND
-- Date is within ±1 day
+If found → skip. Count skipped entries separately.
 
-If found, skip creation. Count skipped entries separately.
+### INSERT for each new entry
+
+```sql
+INSERT INTO france_travail_log
+(action, date, categorie, priorite, entreprise, poste_sujet, mode, source,
+ statut_declaration, notes, job_application_id, contact_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'À déclarer', $9, $10, $11)
+RETURNING id
+```
+
+All new entries default to `statut_declaration = 'À déclarer'`.
+Pass `job_application_id` for candidature entries, `contact_id` for réseau entries, `NULL` otherwise.
 
 ### Sync summary
 
@@ -154,7 +165,7 @@ Prompt the user in order (accept any format for date):
 
 Auto-assign Priorité based on the category chosen (see mapping above).
 Auto-generate the Action title: `[Catégorie] — [Poste/Sujet] @ [Entreprise]` (omit @ part if no Entreprise).
-Source: Manuel.
+Source: `Manuel`.
 
 Confirm before creating:
 ```
@@ -168,7 +179,16 @@ Créer cette entrée ?
 [O/N]
 ```
 
-Create the entry and confirm with the Notion page URL.
+INSERT into france_travail_log:
+```sql
+INSERT INTO france_travail_log
+(action, date, categorie, priorite, entreprise, poste_sujet, mode, source,
+ statut_declaration, notes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'Manuel', $8, $9)
+RETURNING id
+```
+
+Confirm: "Entry created (id=[id])."
 
 ---
 
@@ -177,10 +197,11 @@ Create the entry and confirm with the Notion page URL.
 Ask the user three questions:
 
 **Période :**
-1. Ce mois-ci ([current month])
-2. Mois dernier ([previous month])
-3. Depuis le début (all history)
-4. Période personnalisée (ask for start and end date)
+1. This month ([current month])
+2. Last month ([previous month])
+3. All history
+4. Custom period (ask for start and end date)
+5. This week
 
 **Profondeur :**
 1. Obligatoire seulement — candidatures, entretiens, contacts recruteur
@@ -188,12 +209,31 @@ Ask the user three questions:
 3. Tout — complete log including formations, CV updates, admin
 
 **Statut déclaration :**
-1. À déclarer seulement — show what still needs to be entered into France Travail (default, most useful before a monthly declaration)
+1. À déclarer seulement — show what still needs to be entered into France Travail (default)
 2. Déclaré seulement — show what has already been reported
 3. Tout sauf Exclu — full history minus deliberately excluded entries
 4. Tout — complete log including Exclu entries (audit view)
 
-Fetch matching FT Log entries filtered by Date, Priorité, and Statut déclaration. Sort by Date ascending (chronological — easiest to enter sequentially into France Travail portal).
+Build the SQL filter from these answers:
+
+```sql
+SELECT id, action, date, categorie, priorite, entreprise, poste_sujet, mode,
+       source, statut_declaration, notes, job_application_id
+FROM france_travail_log
+WHERE date BETWEEN $1 AND $2
+  AND priorite = ANY($3)           -- ['Obligatoire'] or ['Obligatoire','Impactant'] or all
+  AND statut_declaration = ANY($4) -- ['À déclarer'] or ['Déclaré'] or ['À déclarer','Déclaré'] or all
+ORDER BY date ASC
+```
+
+For job URL on Candidature entries, join to job_applications:
+```sql
+SELECT ft.*, ja.job_url
+FROM france_travail_log ft
+LEFT JOIN job_applications ja ON ft.job_application_id = ja.id
+WHERE [same filters]
+ORDER BY ft.date ASC
+```
 
 ### Step 2c-i — Check for missing France Travail fields
 
@@ -211,7 +251,7 @@ Missing info for 2 entries:
   → ?
 ```
 
-Save the answers to the Notes field of each entry (prefix: `FT: `).
+Save answers via UPDATE france_travail_log SET notes = COALESCE(notes,'') || ' FT: [answer]' WHERE id = $1.
 
 ### Step 2c-ii — Generate report with French comments
 
@@ -261,7 +301,7 @@ If zero entries match, say so and suggest running a sync first.
 
 ### Step 2c-iii — Per-line triage
 
-After displaying the full list, go through each `À déclarer` entry **one at a time** and ask Zack what to do with it. This is the core decision step — he decides right now, delays to next run, or permanently skips.
+After displaying the full list, go through each `À déclarer` entry **one at a time** and ask Zack what to do with it. Collect all IDs for each decision as you go.
 
 For each entry show a compact summary and three options:
 
@@ -274,7 +314,9 @@ For each entry show a compact summary and three options:
   [X] Don't report        → mark Exclu (kept in log for audit)
 ```
 
-Collect decisions for all entries before writing anything to Notion. After the last entry, show a confirmation summary:
+Zack can respond with one letter per row (e.g. `1R 2D 3X`) or one at a time.
+
+After the last entry, show a confirmation summary:
 
 ```
 Summary of your decisions:
@@ -286,8 +328,10 @@ Confirm and create email draft? [Y/N]
 ```
 
 On confirmation:
-1. Update Notion: set `Exclu` on all entries marked X (leave D entries unchanged)
-2. Draft the email (do NOT mark R entries as `Déclaré` yet — Zack marks them Déclaré after actually entering them into France Travail)
+1. Update Exclu entries: `UPDATE france_travail_log SET statut_declaration='Exclu' WHERE id=ANY($1)`
+   Pass the array of IDs marked X.
+2. Leave D entries unchanged.
+3. Draft the email — do NOT mark R entries as `Déclaré` yet (Zack marks them after actually entering into France Travail).
 
 ### Step 2c-iv — Create Gmail draft
 
@@ -335,7 +379,11 @@ Options:
   Q — Quit
 ```
 
-If **M**: update all entries that were marked R in the triage to `Déclaré` in Notion. Confirm count.
+If **M**: update all R-triage entries:
+```sql
+UPDATE france_travail_log SET statut_declaration='Déclaré' WHERE id=ANY($1)
+```
+Pass the array of IDs that were marked R in the triage. Confirm count.
 
 ---
 
@@ -353,7 +401,7 @@ If **M**: update all entries that were marked R in the triage to `Déclaré` in 
 | Formation | Optionnel | Good to show but lower weight |
 | CV · Profil | Optionnel | Background admin |
 | Administratif | Optionnel | Keep for completeness |
-| Présélection | Optionnel | Role evaluated but screened out pre-application (salary / location / contract / duplicate) — proves active, reasoned job searching |
+| Présélection | Optionnel | Role evaluated but screened out pre-application — proves active, reasoned job searching |
 | Autre | Optionnel | Catch-all |
 
 ---
@@ -369,12 +417,12 @@ FT portal asks for:
 - Nom de l'entreprise
 - Intitulé du poste
 - Site / canal utilisé (job board name, company website, email, etc.)
-- Lien vers l'offre (job posting URL — paste into the portal comment or URL field)
+- Lien vers l'offre (job posting URL)
 - Description courte (comment field)
 
-Required fields in FT Log: Entreprise, Poste/Sujet, Mode, Job URL (from Job Applications DB — carry forward to report), Notes (for site used — prefix `FT: site=Indeed` etc.)
+Required fields in FT Log: entreprise, poste_sujet, mode, job_url (from job_applications — carried forward by sync). notes stores site used (prefix `FT: site=Indeed` etc.)
 
-**Always include the Job URL in the report and email draft** for Candidature entries — pull it from the Job Applications row via the sync. If missing, flag it so Zack can paste manually.
+**Always include the Job URL in the report and email draft** for Candidature entries. If missing, flag it.
 
 Comment template:
 > Candidature au poste de [Poste] chez [Entreprise] via [Site]. [Dossier envoyé par email / en ligne.]
@@ -386,7 +434,7 @@ FT portal asks for:
 - Type d'entretien (téléphonique / visioconférence / présentiel)
 - Description courte
 
-Required fields in FT Log: Entreprise, Poste/Sujet, Mode
+Required fields: entreprise, poste_sujet, mode
 
 Comment template:
 > Entretien [téléphonique / en visioconférence / en présentiel] pour le poste de [Poste] chez [Entreprise].
@@ -398,7 +446,7 @@ FT portal asks for:
 - Mode de contact
 - Description courte
 
-Required fields: Entreprise (cabinet name), Poste/Sujet, Mode
+Required fields: entreprise (cabinet name), poste_sujet, mode
 
 Comment template:
 > Contact avec [Cabinet/Recruteur] au sujet d'opportunités en [domaine/poste]. [Échange par téléphone / email.]
@@ -409,7 +457,7 @@ FT portal asks for:
 - Objet de l'échange
 - Mode de contact
 
-Required fields: Entreprise, Poste/Sujet (use contact name or topic), Mode
+Required fields: entreprise, poste_sujet (use contact name or topic), mode
 
 Comment template:
 > Échange avec [Nom] ([Entreprise]) concernant [les opportunités finance / le marché de l'emploi / un poste spécifique].
@@ -420,7 +468,7 @@ FT portal asks for:
 - Organisme
 - Durée / modalité
 
-Required fields: Poste/Sujet (formation title), Entreprise (organisme), Mode
+Required fields: poste_sujet (formation title), entreprise (organisme), mode
 
 Comment template:
 > Formation : [Intitulé] — [Organisme]. [Durée / En ligne / Présentiel.]
@@ -431,13 +479,13 @@ FT portal asks for:
 - Lieu / format
 - Description
 
-Required fields: Poste/Sujet (event name), Entreprise (organiser if applicable), Mode
+Required fields: poste_sujet (event name), entreprise (organiser if applicable), mode
 
 Comment template:
 > Participation à [Nom de l'événement]. [Lieu / En ligne.] Secteur : finance / emploi cadres.
 
 ### France Travail (advisor meeting)
-Required fields: Poste/Sujet (object of meeting), Mode
+Required fields: poste_sujet (object of meeting), mode
 
 Comment template:
 > Rendez-vous avec conseiller France Travail. [Objet : point sur la recherche / suivi du dossier.]
@@ -446,13 +494,20 @@ Comment template:
 
 ## Step 2d — Stats mode
 
-Pull all rows from `job_applications_db_id` (full history, no date filter). Group by ISO week (Monday = start of week).
+```sql
+SELECT
+  EXTRACT(ISOYEAR FROM date_added)::int AS isoyear,
+  EXTRACT(WEEK FROM date_added)::int AS isoweek,
+  MIN(date_added) AS week_start,
+  COUNT(*) FILTER (WHERE status != 'Dismissed') AS evalues,
+  COUNT(*) FILTER (WHERE status IN ('Applied','Docs Ready','Interview','Offer','Rejected')
+    AND date_applied IS NOT NULL) AS candidatures
+FROM job_applications
+GROUP BY isoyear, isoweek
+ORDER BY isoyear, isoweek
+```
 
-For each row:
-- **Counted as "postes évalués"** (posts considered): any Status except Dismissed
-- **Counted as "candidatures déposées"** (applications filed): Status is Applied, Docs Ready, Interview, Offer, or Rejected WITH a Date Applied set
-
-Build a week-by-week table sorted chronologically. Output:
+Build a week-by-week table sorted chronologically:
 
 ```
 ═══════════════════════════════════════════════════════════
@@ -464,7 +519,6 @@ Semaine              Début       Évalués   Candidatures
 ──────────────────────────────────────────────────────────
 W41 2025             06/10/25        8            3
 W42 2025             13/10/25        5            2
-W43 2025             20/10/25        6            3
 ...
 W15 2026             13/04/26       12            2
 ──────────────────────────────────────────────────────────
@@ -473,8 +527,6 @@ Moyenne / semaine                   X.X          X.X
 Semaines avec ≥ 3 candidatures : X
 Semaines actives (≥ 1 candidature) : X / X total
 ```
-
-This is the audit-ready activity-volume proof. If a controller asks "combien de postes avez-vous cherché par semaine ?", show them this table.
 
 After displaying, offer:
 ```
@@ -487,7 +539,6 @@ Options:
 
 ## Historical population note (first use)
 
-On first sync, the skill will sweep the **full history** of Job Applications (all dates) and Networking Contacts. This will create entries going back to the start of the job search. For actions taken before this system existed (e.g. from Claude Desktop sessions), Zack can:
-1. Ask Claude Desktop to produce a list of job search actions with dates
-2. Paste the list and the skill will parse it and create entries in batch (use Add mode, one by one, or describe the batch)
-3. The skill can also search Gmail for sent application emails (`candidature`, `postuler`, `CV`, `lettre de motivation`) to surface unlogged applications — mention this option at the end of the first sync
+On first sync, the skill will sweep the **full history** of job_applications and networking_contacts. For actions taken before this system existed, Zack can:
+1. Add manual entries via Add mode
+2. The skill can also search Gmail for sent application emails (`candidature`, `postuler`, `CV`, `lettre de motivation`) to surface unlogged applications — mention this option at the end of the first sync

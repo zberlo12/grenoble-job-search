@@ -1,66 +1,68 @@
 ---
 description: Check and update the status of active job applications. Shows Docs Ready, Applied, and Interview rows in a table, lets Zack confirm submissions and log responses (interview, rejection, offer) — no Notion login needed. Can be run any time manually. The same response-detection logic runs automatically inside the daily Gmail scan. Trigger with /job-status.
 argument-hint: No arguments needed.
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread
+allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, Bash
 ---
 
 # Job Status Review
 
-## Step 0 — Load User Profile
+## Step 0 — Load Config
 
-Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context: **Section 1** (user name), **Section 7** (Notion IDs), **Section 9** (auto-expiry threshold).
-If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user.name` → name
+- `lifecycle_rules.auto_expiry_days` → auto-expiry threshold (default 60)
 
----
-
-You are helping the user (name from profile) check the status of all active job applications and
-update them without needing to open Notion directly.
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ---
 
 ## Step 1 — Fetch Active Applications
 
-Search the Job Applications database (data source ID from profile Section 7)
-for rows with Status in: `Docs Ready`, `Applied`, `Interview`.
+```sql
+SELECT id, job_title, company, status, date_added, date_applied, job_url,
+       gmail_thread_url, notes
+FROM job_applications
+WHERE status IN ('Docs Ready', 'Applied', 'Interview')
+ORDER BY
+  CASE status WHEN 'Interview' THEN 1 WHEN 'Applied' THEN 2 ELSE 3 END,
+  COALESCE(date_applied, date_added) ASC
+```
 
-Sort: Interview first, then Applied (oldest first), then Docs Ready.
-
-If nothing is found, say "No active applications — queue is clear." and stop.
+If no rows returned, say "No active applications — queue is clear." and stop.
 
 ---
 
 ## Step 2 — Gmail Response Sweep (silent)
 
-For each row with Status = `Applied` or `Interview`, search Gmail for response emails
-received **after** the `Date Applied`:
+For each row with Status = `Applied` or `Interview`, search Gmail for response emails received **after** the `date_applied` (fallback to `date_added`):
 
 ```
 "[Company]" (entretien OR interview OR candidature OR retenu OR sélectionné OR refusé OR rejected OR suite OR félicitations OR offer) after:YYYY/MM/DD -label:jobs
 ```
 
-Use the `Date Applied` value from Notion for the `after:` date. If `Date Applied` is blank,
-use `Date Added` as a fallback.
+For any thread found, call `get_thread` to classify:
+- **Interview** → mentions: interview, entretien, rendez-vous, call, visio
+- **Offer** → mentions: offre, proposition, félicitations, offer letter
+- **Rejected** → mentions: refusé, ne correspond pas, other candidates, poursuivons sans
+- **Unknown** → can't classify — flag for manual review
 
-For any thread found:
-- Read the thread (get_thread) to classify:
-  - **Interview** → subject/body mentions interview, entretien, rendez-vous, call, visio
-  - **Offer** → subject/body mentions offre, proposition, félicitations, offer letter
-  - **Rejected** → subject/body mentions refusé, ne correspond pas, other candidates, poursuivons sans
-  - **Unknown** → can't classify — flag for manual review
-- Note the thread ID for linking to Notion
-
-**Auto-expiry check (run during this step):**
-For each `Applied` row where `Date Applied` is more than the auto-expiry threshold (from profile Section 9) ago and no response
-found in Gmail → mark for auto-expiry: Status → `Dismissed`,
-Notes → append `" | Auto-expired: no response after [threshold] days"`.
+**Auto-expiry check:** For each `Applied` row where `date_applied` is more than auto-expiry threshold days ago and no response found → mark for auto-expiry: `status = 'Dismissed'`, append to notes.
 
 ---
 
 ## Step 3 — Present Status Table
-
-Output a combined table of all active applications, with any auto-detected responses
-pre-filled:
 
 ```
 ## Active Applications — [N] total
@@ -71,11 +73,10 @@ pre-filled:
 | 2 | [title] | [company] | Applied | [N days] | — | [link] |
 | 3 | [title] | [company] | Applied | [N days] | ⚠️ Rejection found | [link] |
 | 4 | [title] | [company] | Interview | [N days] | — | [link] |
-...
 ```
 
-"Days" = days since Date Applied (or Date Added if no apply date).
-"Response detected" = what the Gmail sweep found, or "—" if nothing.
+"Days" = days since date_applied (or date_added if no apply date).
+"Response detected" = what Gmail sweep found, or "—" if nothing.
 
 ---
 
@@ -87,68 +88,41 @@ For each `Docs Ready` row, ask:
 > "[#] **[Title] @ [Company]** — docs are ready. Have you submitted it?
 > Reply `yes [date]` (e.g. `yes 16/04`) to mark Applied, or `skip` to leave as Docs Ready."
 
-Process each in turn. `yes [date]` → Status: `Applied`, Date Applied: parsed date.
+`yes [date]` → update via:
+```sql
+UPDATE job_applications SET status='Applied', date_applied=$1 WHERE id=$2
+```
 
 ### 4B — Pre-filled responses
-For any row where the Gmail sweep detected a response, confirm with Zack:
+For any row where Gmail sweep detected a response, confirm:
 
-> "[#] **[Title] @ [Company]** — I found what looks like a [Rejection / Interview / Offer]
-> email ([thread snippet]). Confirm? Reply `yes` to update status, or `no` to leave as-is."
+> "[#] **[Title] @ [Company]** — I found what looks like a [Rejection / Interview / Offer] email ([snippet]). Confirm? Reply `yes` or `no`."
 
-`yes` → update Status + set Date Response + link Gmail thread URL.
+`yes` → run appropriate UPDATE (see Step 5 table).
 
 ### 4C — Manual updates
-After processing pre-fills, ask once:
+Ask once:
+> "Any other updates? Type `[#] [new status]` for each (e.g. `2 interview`, `3 rejected`, `4 offer`). Or `done` to finish."
 
-> "Any other updates? Type `[#] [new status]` for each (e.g. `2 interview`, `3 rejected`,
-> `4 offer`). Or `done` to finish."
+Valid: `interview`, `rejected`, `offer`, `hold`, `applied [date]`.
 
-Valid status keywords: `interview`, `rejected`, `offer`, `hold`, `applied [date]`.
-
-### 4D — Offer handling (runs when any row is updated to "Offer")
-
-When a row moves to Offer status (via auto-detection or manual entry):
-
-Ask:
-> "Congratulations! What are the offer details?
->   - Base salary:
->   - Any bonus, variable pay, or other components:
->   (Type 'skip' to just record the status change)"
-
-If details provided:
-1. Compare to the salary floor from profile Section 2. Flag if below:
-   "⚠️ This offer is below your stated floor of [€X]."
-
-2. Fetch market benchmarks via WebFetch (try in order until one returns data):
-   - `apec.fr/candidat/les-etudes-apec/les-salaires-des-cadres.html`
-   - Glassdoor France search for `[role] [location]`
-   - PayScale France
-   Extract the typical salary range for this role type and location.
-
-3. Generate a negotiation brief and append to the Notion row Notes:
-   ```
-   Offer received [date]: [stated salary]
-   Market range for [role] in [location]: approx [X]–[Y]
-   Assessment: [above/at/below] market
-   [If below: Suggested counter: [Y+5%]. Opening line:]
-   "Thank you for the offer. Given my [key experience] and current market rates for this level,
-   I was expecting something closer to [target]. Is there flexibility?"
-   ```
+### 4D — Offer handling
+When a row moves to Offer, ask for offer details. Compare to salary floor from config.json `user.salary_floor_apply`. Fetch market benchmarks via WebFetch if available. Generate negotiation brief and append to notes.
 
 ---
 
 ## Step 5 — Apply All Updates
 
-For each confirmed change, call `notion-update-page`:
-
-| Change | Properties to update |
+| Change | SQL |
 |---|---|
-| Docs Ready → Applied | `Status: Applied`, `date:Date Applied:start: YYYY-MM-DD` |
-| Applied → Interview | `Status: Interview`, `date:Date Response:start: YYYY-MM-DD` (today if not given) |
-| Applied/Interview → Rejected | `Status: Rejected`, `date:Date Response:start: YYYY-MM-DD`, Notes: append rejection note |
-| Applied/Interview → Offer | `Status: Offer`, `date:Date Response:start: YYYY-MM-DD` |
-| Auto-expiry | `Status: Dismissed`, Notes: append auto-expiry note |
-| Gmail thread linked | `Gmail Thread URL: https://mail.google.com/mail/u/0/#all/[threadId]` |
+| Docs Ready → Applied | `UPDATE job_applications SET status='Applied', date_applied=$1 WHERE id=$2` |
+| Applied → Interview | `UPDATE job_applications SET status='Interview', date_response=CURRENT_DATE WHERE id=$1` |
+| Applied/Interview → Rejected | `UPDATE job_applications SET status='Rejected', date_response=CURRENT_DATE, notes=notes\|\|$1 WHERE id=$2` |
+| Applied/Interview → Offer | `UPDATE job_applications SET status='Offer', date_response=CURRENT_DATE WHERE id=$1` |
+| Auto-expiry | `UPDATE job_applications SET status='Dismissed', notes=notes\|\|' \| Auto-expired: no response after [N] days' WHERE id=$1` |
+| Gmail thread linked | `UPDATE job_applications SET gmail_thread_url=$1 WHERE id=$2` |
+
+Confirm each update with the affected row count.
 
 ---
 

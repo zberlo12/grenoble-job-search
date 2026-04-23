@@ -1,31 +1,32 @@
 ---
-description: Manual Indeed job search for Grenoble area and/or remote France-wide roles. Asks whether to search locally, remotely, or both, then runs grouped searches, deduplicates against Notion, analyses each listing, and writes new entries. Use when you want to sweep Indeed directly — separate from the daily Gmail scan.
+description: Manual Indeed job search for Grenoble area and/or remote France-wide roles. Asks whether to search locally, remotely, or both, then runs grouped searches, deduplicates against Supabase, analyses each listing, and writes new entries. Use when you want to sweep Indeed directly — separate from the daily Gmail scan.
 argument-hint: Optional. Leave empty to be prompted. Or pass "local", "remote", or "both".
-allowed-tools: mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-create-pages, AskUserQuestion
+allowed-tools: mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_job_details, AskUserQuestion, Bash
 ---
 
 # Indeed Job Search — Grenoble / Remote
 
-## Step 0 — Load User Profile
+## Step 0 — Load Config
 
-Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context:
-- **Section 1** — user name, base location (used to set search location)
-- **Section 2** — salary floors, contract preference, language preference
-- **Section 4** — location zones
-- **Section 5** — job title alerts (use these as search groups — see below)
-- **Section 7** — Notion IDs (Job Applications DB and data source IDs)
-- **Section 9** — lifecycle rules (dedup window)
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user` → name, base_city, salary_floor_apply, language_preference
+- `location_zones` → green/yellow/orange/red city lists
+- `lifecycle_rules.dedup_window_days` → 30
+- `job_titles` → french and english title lists (for search groups)
 
-If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
-
-**Search groups below come from profile Section 5.** The groups listed in Steps 2A/2B are the
-default set for this user — a new user should update Section 5 of their profile to replace them.
-
----
-
-You are running a manual Indeed job search sweep for the user (name from profile) based in
-the location from their profile.
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ---
 
@@ -45,9 +46,7 @@ If `$ARGUMENTS` is "local", "remote", or "both" — use that. Otherwise ask:
 
 Run **5 search groups** with `location: "Grenoble, France"`, `country_code: "FR"`, `job_type: "fulltime"`.
 
-Then run groups 1 and 2 again with `location: "Chambéry, France"` to capture Yellow-zone roles (Voiron, Moirans, Pontcharra, Chambéry) that may not surface in the Grenoble radius.
-
-### Local search groups
+Then run groups 1 and 2 again with `location: "Chambéry, France"` to capture Yellow-zone roles.
 
 **Group 1 — FP&A / Controller / CDG:**
 `"Contrôleur de Gestion OR Financial Controller OR FP&A Manager OR Finance Business Partner OR Responsable Contrôle de Gestion OR Responsable FP&A OR Responsable Planification Financière OR Contrôleur de Gestion Senior OR Pilote Financier"`
@@ -75,7 +74,7 @@ Run **3 search groups** with `location: "France"`, `country_code: "FR"`, `job_ty
 **Group 1 — Finance Director / FP&A / Head of Finance / CFO:**
 `"Finance Director OR Directeur Financier OR Directeur Administratif et Financier OR DAF OR Financial Controller OR FP&A Manager OR Finance Manager OR Head of Finance OR CFO OR Finance Lead OR Responsable FP&A OR VP Finance"`
 
-> **CFO note**: For any CFO result, verify company size before ranking — appropriate only where CFO = sole Finance Director (typically companies ≤€100M revenue). Skip if the company is clearly large-cap or already has a DAF layer above the CFO title.
+> **CFO note**: For any CFO result, verify company size before ranking — appropriate only where CFO = sole Finance Director (typically ≤€100M revenue). Skip if clearly large-cap.
 
 **Group 2 — Finance Business Partner / Reporting / Consolidation / Trésorerie:**
 `"Finance Business Partner OR Finance Transformation OR Responsable Budget et Reporting OR Consolidation Manager OR Responsable Consolidation OR Responsable Trésorerie OR Responsable Planification Financière OR Group Finance Manager"`
@@ -83,107 +82,95 @@ Run **3 search groups** with `location: "France"`, `country_code: "FR"`, `job_ty
 **Group 3 — P2P / Procurement / S&OP:**
 `"P2P Manager OR Responsable P2P OR Procurement Manager OR Finance Governance OR Responsable Procure-to-Pay OR S&OP Manager OR Responsable S&OP OR Directeur Achats"`
 
-Total: 3 API calls. Run all in parallel.
-
 ---
 
-## Step 3 — Deduplicate Against Notion
+## Step 3 — Deduplicate Against Supabase
 
-Database ID: from profile Section 7 (Job Applications DB)
+Collect all results from Steps 2A/2B. Deduplicate across searches first (same job ID = one entry). Then for each unique listing:
 
-**Pre-dedup title normalisation:**
-Before searching, expand known abbreviations in both the extracted title and the search string:
+**Check dedup window (last 30 days):**
+```sql
+SELECT id FROM job_applications
+WHERE (company ILIKE $1 AND job_title ILIKE $2 AND date_added >= CURRENT_DATE - 30)
+   OR (job_url LIKE $3 AND date_added >= CURRENT_DATE - 30)
+```
+Also check review_queue:
+```sql
+SELECT id FROM review_queue
+WHERE company ILIKE $1 AND job_title ILIKE $2
+  AND date_added >= CURRENT_DATE - 30
+```
+
+If found in either table → discard. If not found → proceed to analysis.
+
+**Pre-dedup title normalisation:** Expand abbreviations before searching:
 - RAF ↔ Responsable Administratif Financier
 - DAF ↔ Directeur Administratif Financier
 - CDG ↔ Contrôleur de Gestion
 - FBP ↔ Finance Business Partner
-Search for both the original and expanded forms if the title contains one of these.
-
-Collect all results from Steps 2A/2B. Deduplicate across searches first (same job ID = one entry). Then for each unique listing:
-
-- If job ID (`jk=` extracted from URL) matches a Notion entry created in the last 30 days → discard.
-- If no URL match, call `mcp__claude_ai_Notion__notion-search` for `"[Company] [Normalised Title]"` within the last 30 days → discard if found.
-- Fuzzy check: also search `"[Company]"` alone. If a result's title normalises to the same root as the new listing → flag as "Possible duplicate — manual check" in the summary rather than writing a new row.
-
-Only listings that pass all checks proceed to Step 4.
 
 ---
 
 ## Step 4 — Analyse Each Listing
 
 ### Adjacent title recognition
-
-Indeed searches return listings based on keyword matching, not semantic role equivalence. Before skipping any result on title alone, briefly check whether the **actual role content** (from the snippet or job details) suggests a finance leadership function. Titles to watch for that may not match keywords but describe the same scope:
-
-- "Responsable de Gestion", "Gestionnaire Financier Senior", "Responsable Performance", "Directeur de Site" (if finance scope), "Finance & Operations Manager", "Responsable Administratif"
-
-If the snippet or company context suggests a senior finance function, fetch full details and analyse properly rather than discarding on title.
+Before skipping on title alone, check whether the role content (snippet, job details) suggests a finance leadership function. Watch for: "Responsable de Gestion", "Gestionnaire Financier Senior", "Responsable Performance", "Finance & Operations Manager".
 
 ### Rescue gate (apply FIRST)
-
-Indeed postings routinely omit salary, hybrid policy, and full scope. Do NOT downgrade plausible finance matches to C or Skip just because the listing is incomplete.
-
-If ALL of the following are true:
-1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level)
+If ALL true:
+1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance at senior level)
 2. Location is 🟢 Green, 🟡 Yellow, 🌐 Remote, or unspecified for remote search
-3. No hard disqualifier (Paris on-site only, explicitly junior, wrong function, salary stated below €45K)
+3. No hard disqualifier (Paris on-site, explicitly junior, salary stated below €45K)
 
-...AND any of Salary, Hybrid policy, Full scope, or Company name is missing → route to review queue:
-- `Status = "Needs Info"`, `Priority = B` (provisional)
-- `Missing Info` — list the missing fields
+...AND any of Salary, Hybrid policy, Full scope, or Company name is missing → route to review_queue:
+- `status = 'Needs Info'`, `priority = 'B'` (provisional)
 
-**Tiebreaker**: When genuinely unclear, always route to `Needs Info`. Only assign Skip or C when a disqualifier is unambiguous.
+**Tiebreaker**: When genuinely unclear, always route to Needs Info.
 
 ### Location zones (local search)
+- 🟢 Green: Grenoble, Échirolles, Meylan, Saint-Égrève, Pont-de-Claix, Montbonnot, Crolles, Voreppe, Bernin, Saint-Martin-d'Hères, dept 38 core towns
+- 🟡 Yellow: Voiron, Moirans, Chambéry, Saint-Marcellin, Pontcharra
+- 🟠 Orange: Valence, Annecy, Ugine, Faverges, Cluses, Bourg-en-Bresse, Albertville
+- 🔴 Red: Lyon, La Tour-en-Maurienne, Paris, Luxembourg
 
-- 🟢 Green (0–25 min): Grenoble, Échirolles, Meylan, Saint-Égrève, Pont-de-Claix, Montbonnot, Crolles, Voreppe, Bernin, Saint-Martin-d'Hères, and all dept 38 core towns
-- 🟡 Yellow (30–50 min): Voiron, Moirans, Chambéry, Saint-Marcellin, Pontcharra
-- 🟠 Orange (1h–1h45): Valence, Annecy, Ugine, Faverges, Cluses, Bourg-en-Bresse, Albertville
-- 🔴 Red (1h15+ / no hybrid): Lyon, La Tour-en-Maurienne, Paris, Luxembourg
-
-For remote search: location zone defaults to 🌐 Remote — assess on role fit and contract type only.
+For remote search: location zone defaults to 🌐 Remote.
 
 ### Priority rules
-
 - 🟢 A: Senior finance/FP&A/controlling, Green/Yellow/Remote, CDI, English exposure, ≥€55K
 - 🟡 B: Good fit on 3/4 criteria; or Tier A company with one weakness
 - 🔴 C: Multiple mismatches or one disqualifying factor
-- ⛔ Skip: Definitive disqualifier (Paris on-site, clearly junior, <€40K stated, unrelated role)
-
-### Red flags
-
-- Salary below €55K or not disclosed
-- French-only role at international company
-- Scope below Director level
-- Orange/Red zone without hybrid confirmed
-- Agency opacity (no company name, vague scope)
-- CDD/interim without strong justification
+- ⛔ Skip: Definitive disqualifier
 
 ---
 
-## Step 5 — Write to Notion
+## Step 5 — Write to Supabase
 
-For each surviving listing (not skipped), call `mcp__claude_ai_Notion__notion-create-pages` with:
-```
-parent: { type: "data_source_id", data_source_id: "[Job Applications data source ID from profile Section 7]" }
+For each surviving listing:
+
+**Needs Info → `review_queue`:**
+```sql
+INSERT INTO review_queue
+(job_title,company,source,location,salary,priority,status,date_added,
+ job_url,red_flags,missing_info,alert_keyword,notes,english,job_description)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+RETURNING id
 ```
 
-| Property | Value |
-|---|---|
-| `Job Title` | extracted title |
-| `Company` | company name or `"Not disclosed"` |
-| `Source` | `Indeed` |
-| `Location` | city + dept (local) or `"Remote"` / city if specified (remote) |
-| `Salary` | as stated or `"Not stated"` |
-| `Priority` | `A` / `B` / `C` (omit if Skip) |
-| `CV Approach` | `Standard` / `FP&A Focus` / `Cost Control Focus` / `Transformation Focus` |
-| `Status` | `To Assess` for ranked listings, `Needs Info` if rescue gate applied |
-| `date:Date Added:start` | today as ISO string e.g. `"2026-04-16"` |
-| `Job URL` | URL string if available |
-| `Red Flags` | JSON array e.g. `"[\"Low salary\"]"` |
-| `Missing Info` | JSON array if rescue gate applied |
-| `Notes` | 2–3 sentence analysis; rescue gate entries start with `"QUEUED:"` |
-| `English` | `"__YES__"` if English mentioned, otherwise `"__NO__"` |
+**Ranked (To Assess/To Apply/Dismissed) → `job_applications`:**
+```sql
+INSERT INTO job_applications
+(job_title,company,source,location,salary,priority,cv_approach,status,
+ date_added,job_url,red_flags,missing_info,notes,english,job_description)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+RETURNING id
+```
+
+Field values:
+- `source`: `'Indeed'`
+- `status`: `'To Assess'` (ranked B/C), `'To Apply'` (A), `'Dismissed'` (Skip), `'Needs Info'` (rescue gate → review_queue only)
+- `red_flags`: `JSON.stringify([...])`, `missing_info`: `JSON.stringify([...])`
+- `english`: boolean `true`/`false`
+- `date_added`: today as `'YYYY-MM-DD'`
 
 ---
 
@@ -191,7 +178,7 @@ parent: { type: "data_source_id", data_source_id: "[Job Applications data source
 
 ```
 Indeed Sweep — [Local / Remote / Both]
-Results: [N] found · [N] skipped (already in Notion) · [N] written to Notion
+Results: [N] found · [N] skipped (already in Supabase) · [N] written
 
 By Priority:
 🟢 A: [N] — [titles if any]

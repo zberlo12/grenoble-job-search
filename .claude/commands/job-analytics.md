@@ -1,69 +1,124 @@
 ---
 description: Pipeline health dashboard showing funnel metrics, source quality, response rates, and red flag patterns across your job search. Read-only — no updates. Trigger with /job-analytics.
 argument-hint: Optional time window in days: "7", "30", or "90". Default: 30.
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search
+allowed-tools: Bash
 ---
 
 # Job Search Analytics
 
-## Step 0 — Load User Profile
+## Step 0 — Load Config
 
-Search Notion for the page titled "⚙️ User Profile & Config" using `mcp__claude_ai_Notion__notion-search`, then fetch the first result using `mcp__claude_ai_Notion__notion-fetch`.
-Extract into context: **Section 1** (user name), **Section 7** (Job Applications data source ID).
-If no page is found, halt: "User Profile not found in Notion — run /job-user-setup to create your profile first."
+Run `cat config.json` via Bash. Parse the output and extract:
+- `supabase_connection_string` → PG_CONN
+- `pg_module_path` → PG_MODULE
+- `user.name` → name
+- `location_zones` → green/yellow/orange/red city lists
+
+**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+```bash
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('<SQL>',[<params>]))
+  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 ---
 
-## Step 1 — Fetch data
+## Step 1 — Fetch Data
 
 Parse `$ARGUMENTS` for a time window (7, 30, or 90 days). Default: 30.
 
-Fetch the full Job Applications database (data source ID from profile Section 7).
-Retrieve all rows — compute window-filtered and all-time metrics separately.
+Run three queries in sequence (use the DB query pattern, substituting actual connection values):
+
+**Query 1 — Window rows:**
+```sql
+SELECT id, job_title, company, source, location, salary, priority, status,
+       date_added, date_applied, date_response, alert_keyword, red_flags, english
+FROM job_applications
+WHERE date_added >= CURRENT_DATE - $1::int
+ORDER BY date_added
+```
+Pass `[window_days]` as params.
+
+**Query 2 — Pipeline snapshot (all time, both tables):**
+```sql
+SELECT status, count(*)::int AS count FROM job_applications GROUP BY status
+UNION ALL
+SELECT status, count(*)::int AS count FROM review_queue GROUP BY status
+ORDER BY status
+```
+
+**Query 3 — Speed metrics:**
+```sql
+SELECT
+  ROUND(AVG(date_applied - date_added)) AS avg_days_to_apply,
+  ROUND(AVG(date_response - date_applied)) AS avg_days_to_response
+FROM job_applications
+WHERE date_applied IS NOT NULL
+```
+
+**Query 4 — Alert performance (window):**
+```sql
+SELECT
+  alert_keyword,
+  COUNT(*)::int AS total,
+  COUNT(*) FILTER (WHERE status != 'Dismissed')::int AS pursued
+FROM job_applications
+WHERE date_added >= CURRENT_DATE - $1::int
+  AND alert_keyword IS NOT NULL AND alert_keyword != ''
+GROUP BY alert_keyword
+ORDER BY total DESC
+```
+Pass `[window_days]` as params.
 
 ---
 
-## Step 2 — Compute metrics
+## Step 2 — Compute Metrics
 
-### Volume (rows where Date Added is within the window)
+Using the fetched rows, compute in-context:
+
+### Volume (window rows)
 - Total listings found
-- By source: LinkedIn / Indeed / Direct / Referral / Other
-- By priority assigned: A / B / C / Needs Info / Dismissed/Skip
+- By source: LinkedIn / Indeed / Direct / Other
+- By priority assigned: A / B / C / Needs Info / Dismissed
+
+For Needs Info counts in the window, also run:
+```sql
+SELECT COUNT(*)::int AS count FROM review_queue
+WHERE date_added >= CURRENT_DATE - $1::int AND status = 'Needs Info'
+```
 
 ### Pipeline snapshot (all rows, current status)
-Count rows in each status: Needs Info, To Assess, Potentially Apply, To Apply, Docs Ready, Applied, Interview, Offer, Rejected, Dismissed
+Use Query 2 results. Count rows in each status: Needs Info, To Assess (from review_queue) + Potentially Apply, To Apply, Docs Ready, Applied, Interview, Offer, Rejected, Dismissed (from job_applications).
 
-### Funnel conversion (all rows with a Date Applied)
-- **Application rate** = Applied+Interview+Offer+Rejected+Dismissed / (To Apply+Applied+Interview+Offer+Rejected+Dismissed)
-- **Interview rate** = Interview+Offer / Applied+Interview+Offer+Rejected
-- **Offer rate** = Offer / Interview+Offer (show only if >0)
+### Funnel conversion
+- **Application rate** = (Applied+Interview+Offer+Rejected) / (To Apply+Applied+Interview+Offer+Rejected)
+- **Interview rate** = (Interview+Offer) / (Applied+Interview+Offer+Rejected)
+- **Offer rate** = Offer / (Interview+Offer) — show only if > 0
 
-### Speed (rows that have both dates)
-- Average days from Date Added to Date Applied
-- Average days from Date Applied to Date Response
+### Speed
+From Query 3 results.
 
-### Top red flags (rows in window, Red Flags field)
-Count occurrences of each flag value. Show top 3.
+### Top red flags (window rows)
+`red_flags` is a JSONB array. Parse each row's red_flags array and count occurrences of each flag. Show top 3.
 
-### Zone breakdown (rows in window)
-Derive zone from Location field using profile Section 4 zone tables.
-Count: Green / Yellow / Orange / Red / Remote.
+### Zone breakdown (window rows)
+Derive zone from Location field using location_zones from config. Count: Green / Yellow / Orange / Red / Remote.
 
-### Market visibility (rows in window — includes Dismissed rows)
-- Total found = all rows with Date Added in window (pursued + dismissed)
-- Pursued = rows where Status ≠ "Dismissed" at point of writing
+### Market visibility (window rows — includes Dismissed)
+- Total found = all window rows
+- Pursued = rows where Status ≠ "Dismissed"
 - Dismissed = rows where Status = "Dismissed"
 - Pass rate = Pursued / Total × 100%
 
-### Dismiss reason breakdown (Dismissed rows in window)
-Count occurrences of each Red Flag value on rows with Status = "Dismissed". Show top 4.
+Top dismiss reasons: count red_flags values on Dismissed rows in window. Show top 4.
 
-### Alert performance (rows in window, grouped by Alert Keyword field)
-For each distinct Alert Keyword value:
-- Total rows with that keyword
-- Pursued rows (Status ≠ "Dismissed")
-- Pass rate = Pursued / Total
-Sort by Total descending. Omit rows where Alert Keyword is blank.
+### Alert performance
+From Query 4 results. For each keyword: pass rate = pursued / total.
 
 ---
 
@@ -99,7 +154,7 @@ Avg days to response: [N]
 Green [N]  ·  Yellow [N]  ·  Orange [N]  ·  Red [N]  ·  Remote [N]
 
 ### Market Visibility (last [N] days)
-[N] listings found in emails  ·  [N] pursued ([N]%)  ·  [N] dismissed ([N]%)
+[N] listings found  ·  [N] pursued ([N]%)  ·  [N] dismissed ([N]%)
 
 Top dismiss reasons:
 1. [flag] — [N]
@@ -110,16 +165,10 @@ Top dismiss reasons:
 | Alert Keyword | Found | Pursued | Pass rate |
 |---|---|---|---|
 | [keyword] | [N] | [N] | [N]% |
-| [keyword] | [N] | [N] | [N]% |
 
 [If any keyword has 0% pass rate: "⚠️ '[keyword]' has 0% pass rate — consider pausing or refining this alert."]
 [If no Alert Keyword data yet: "Alert performance data will appear after the first daily scan runs."]
 
 ### Insight
-[1–2 sentence observation — e.g.:]
-- "Far location is your top red flag — [N] listings flagged. Check whether Orange-zone listings
-  are being given a fair chance if hybrid is possible."
-- "Your interview rate is 0% across [N] applications. You have [N] Applied rows older than 14
-  days — run /job-status to check for responses and consider following up."
-- "Pipeline is healthy — [N] A-priority listings ready to apply."
+[1–2 sentence observation]
 ```
