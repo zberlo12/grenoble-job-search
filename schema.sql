@@ -144,3 +144,28 @@ CREATE TABLE scan_archive (
 );
 
 CREATE INDEX idx_sa_scan_date ON scan_archive(scan_date);
+
+-- ─── listing_inbox ────────────────────────────────────────────────────────────
+CREATE TABLE listing_inbox (
+    id               SERIAL PRIMARY KEY,
+    parse_date       DATE NOT NULL,
+    gmail_thread_id  TEXT,
+    gmail_thread_url TEXT,
+    source           TEXT,
+    alert_keyword    TEXT,
+    job_title        TEXT,
+    company          TEXT DEFAULT 'Not disclosed',
+    location         TEXT,
+    salary           TEXT,
+    job_url          TEXT,
+    contract_type    TEXT,
+    parse_status     TEXT NOT NULL DEFAULT 'pending',
+    parse_notes      TEXT,
+    english          BOOLEAN DEFAULT FALSE,
+    raw_snippet      TEXT,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_inbox_parse_date   ON listing_inbox(parse_date);
+CREATE INDEX idx_inbox_parse_status ON listing_inbox(parse_status);
+CREATE INDEX idx_inbox_source       ON listing_inbox(source);
