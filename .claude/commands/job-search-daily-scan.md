@@ -136,10 +136,14 @@ Match → duplicate, skip.
 
 ### 4b — Rescue gate (apply BEFORE standard ranking)
 
+**Operational/non-finance gate (check first):**
+If the role is operational, logistics, supply chain, manufacturing, or non-finance project management (i.e. not primarily a finance/accounting/controlling title) → always route to `status='Needs Info'`, `priority='B'`, `notes` starts with `'OPERATIONAL ROLE — review for fit'`. Do not apply standard ranking. Do not dismiss.
+
+**Standard rescue gate:**
 If ALL of the following are true:
-1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level)
+1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level, Financial Analyst, CDG, RAF, DAF, Chef Comptable, Trésorerie, Audit, SSC, Project Manager Finance/ERP)
 2. Location is Green, Yellow, or Remote
-3. No hard disqualifier (Paris on-site, explicitly junior, wrong function, salary stated below €45K)
+3. No hard disqualifier (Paris on-site, explicitly entry-level ≤3 yrs required, salary stated below €45K)
 
 …AND any of Salary, Hybrid policy, Full scope, or Company name is missing:
 → `status='Needs Info'`, `priority='B'`, `missing_info`=list of missing fields, `notes` starts with `'QUEUED:'`
@@ -158,7 +162,7 @@ If ALL of the following are true:
 - **A**: Senior finance/FP&A/controlling, Green or Yellow, CDI, English exposure, ≥€55K → `job_applications` `To Apply`
 - **B**: Good fit on 3/4 criteria → `review_queue` `To Assess`
 - **C**: Multiple mismatches or one disqualifying factor → `review_queue` `To Assess`
-- **Dismissed**: Definitive disqualifier (Paris on-site, clearly junior, <€40K stated, unrelated role) → `job_applications` `Dismissed`, populate `red_flags`, `notes='Auto-dismissed: [reason]'`
+- **Dismissed**: Definitive disqualifier (Paris on-site, explicitly entry-level with ≤3 years required, <€40K stated, truly unrelated role — IT development, medical, marketing, HR professional, legal, education) → `job_applications` `Dismissed`, populate `red_flags`, `notes='Auto-dismissed: [reason]'`. Operational/logistics/supply chain/PM roles are NEVER auto-dismissed — see rescue gate above.
 
 ### 4d — Pre-write enrichment (Needs Info rows only)
 
