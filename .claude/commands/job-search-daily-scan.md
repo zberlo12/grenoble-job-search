@@ -1,26 +1,21 @@
 ---
-description: Daily Gmail job alert scan agent (Gmail-only). Searches Gmail for job alert emails received in the last 24 hours, analyses each listing using the same criteria as /job-search, writes new entries to Supabase, and posts a daily digest to the Notion archive. For Indeed direct searches use /job-search-indeed. This runs automatically each morning — do not invoke manually unless testing.
-argument-hint: Optional. `MM/DD/YY` for a single day, `MM/DD/YY+` to catch up from that date through yesterday, or append `@source` to filter to one sender e.g. `03/26/26+ @linkedin` or `04/14/26 @cadremploi`. Default (no arg) scans yesterday, all sources.
-model-note: Schedule this cron on Claude Sonnet (cost-efficient). The tiebreaker rule in Step 5 compensates for Sonnet's weaker judgment on borderline calls by biasing toward Needs Info rather than Skip.
-allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, Bash
+description: Daily job scan — reads from listing_inbox staging table (populated by /job-email-inbox), analyses all pending rows, routes results to Supabase, sends a Gmail draft digest. Runs automatically each morning at 00:01. Do not invoke manually unless testing.
+argument-hint: Optional MM/DD/YY for a single day, or MM/DD/YY+ to catch up from that date through yesterday. Default (no arg) scans yesterday.
+allowed-tools: mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Gmail__create_draft, Bash
 ---
 
-# Daily Job Alert Scan Agent
+# Daily Job Scan
 
 ## Step 0 — Load Config
 
-Run `cat config.json` via Bash. Parse the output and extract:
+Run `cat config.json` via Bash. Extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
-- `user.name` → name
-- `user.salary_floor_apply` → salary_floor (€55K default)
-- `user.salary_floor_reject` → hard_reject (€40K default)
+- `user.salary_floor_apply` → salary_floor (default €55K)
+- `user.salary_floor_reject` → hard_reject (default €45K)
 - `location_zones` → green/yellow/orange/red city lists
-- `gmail.label` → Gmail label (default: "jobs")
-- `notion.daily_scans_archive` → Daily Scans archive page ID
-- `lifecycle_rules.dedup_window_days` → dedup window (default: 30)
 
-**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
+**DB query pattern** — substitute actual values in every Bash call:
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
 const {Client}=require(process.env.PG_MODULE);
@@ -34,262 +29,156 @@ c.connect()
 
 ---
 
-You are running an automated daily job search scan for the user. This runs each morning.
-
-Your goal: find all new job listings from yesterday's email alerts, analyse each one, write results to Supabase, and produce a brief digest in the Notion archive.
-
----
-
 ## Step 1 — Determine Scan Dates
 
-Parse `$ARGUMENTS` into a date range and optional source filter.
-
-**Date formats** (`MM/DD/YY`, e.g. `04/12/26`):
-- **Empty** → scan yesterday only.
+Parse `$ARGUMENTS`:
+- **Empty** → scan yesterday only, then run automatic catch-up check.
 - **`MM/DD/YY`** → scan that single date only.
-- **`MM/DD/YY+`** → scan from that date through yesterday (catch-up mode).
+- **`MM/DD/YY+`** → scan from that date through yesterday.
 
-**Optional source filter** — append `@keyword` after the date to restrict Gmail searches to a single sender:
-- `03/26/26+ @apec` → only `from:offres@diffusion.apec.fr`
-- `04/14/26 @linkedin` → only `from:linkedin.com`
-- `04/14/26 @cadremploi` → only `from:alertes.cadremploi.fr`
-- `04/14/26 @indeed` → only `from:jobalert.indeed.com`
+Today's date comes from the `currentDate` context variable. Never scan today itself.
 
-When a source filter is active, skip the other Gmail searches entirely for that run.
+**Automatic catch-up check (when $ARGUMENTS is empty):**
+```sql
+SELECT scan_date FROM scan_archive ORDER BY scan_date DESC LIMIT 1
+```
+- If gap between most-recent scan_date and yesterday > 1 day → expand scan range from (most-recent + 1 day) through yesterday. Add "⚠️ Catch-up scan ([N] days missed)" to each date's digest.
+- If no rows in scan_archive → scan yesterday only (first run).
 
-**Known source map:**
-| Keyword | Gmail filter |
-|---|---|
-| `@apec` | `from:offres@diffusion.apec.fr` |
-| `@linkedin` | `from:linkedin.com` |
-| `@cadremploi` | `from:alertes.cadremploi.fr` |
-| `@indeed` | `from:jobalert.indeed.com` |
-
-Today's date comes from the injected `currentDate` context variable — use it to compute "yesterday" and to bound the catch-up range. Never scan today itself; alert emails for today are still arriving.
-
-**Automatic catch-up check (runs when $ARGUMENTS is empty):**
-
-If no arguments were given (default daily run), before starting the scan:
-1. Use `notion-search` to find all pages titled "Job Alert Scan — " under the Daily Scans archive page (ID from config `notion.daily_scans_archive`). Sort results by title descending to find the most recent date.
-2. Parse the date from the most recent page title (format: "Job Alert Scan — YYYY-MM-DD") and compute gap = yesterday − most-recent-scan-date in days.
-3. If gap > 1: automatically expand the scan range from (most-recent-scan-date + 1 day) through yesterday.
-   Add a note at the top of each digest section: "⚠️ Catch-up scan (missed [N] days)"
-4. If gap = 1 or 0: normal single-day scan (yesterday only)
-5. If no subpages found: scan yesterday only (first run)
-
-**Run Steps 2 through 7 once per date in the resolved list**, in chronological order. Each date gets its own Gmail/Indeed sweep, its own dedup pass against Supabase, and its own dated section in the Daily Scans archive. Do not merge days into one digest.
-
-For each scan date, search for emails received between 00:00 and 23:59 on that date.
+**Run Steps 2–4 once per date**, in chronological order. Step 5 (response check) runs once after all dates complete.
 
 ---
 
-## Step 2 — Search Gmail for Job Alerts
+## Step 2 — Read listing_inbox
 
-Run two Gmail searches using `search_threads` with `after:` and `before:` date filters (format: `YYYY/MM/DD`). Use (scan_date) for `after` and (scan_date + 1 day) for `before` to capture the full day.
+Run two queries in parallel for the current scan_date:
 
-**Search 1 — All job alert emails (label-based):**
-```
-label:jobs after:YYYY/MM/DD before:YYYY/MM/DD
-```
-
-**Search 2 — APEC alerts:**
-```
-from:offres@diffusion.apec.fr after:YYYY/MM/DD before:YYYY/MM/DD
+**Query A — Pending rows** (readable listings to analyse):
+```sql
+SELECT * FROM listing_inbox
+WHERE parse_date=$1 AND parse_status='pending'
+ORDER BY created_at ASC
 ```
 
-> **APEC content limitation**: APEC emails are HTML-only with no plain-text fallback. `get_thread` returns no body content. Do NOT attempt to call `get_thread` on APEC threads — it will return nothing useful. Instead, when an APEC thread is found: read the subject line for the total count (e.g. "17 offres Apec du 14/04/2026") and the snippet for the matching count, log both in the daily digest under a **"APEC — manual check required"** section, and skip to the next thread.
-
-> **Cadremploi HTML-only handling — three-rung ladder:**
-> Cadremploi emails often have no plain-text body. When a Cadremploi thread returns no `plaintextBody`:
->
-> **Rung 1 — Snippet parsing (always try first):**
-> Parse the Gmail snippet for a company name and the subject for listing count. If company + single-listing signal found: construct a minimal listing entry and proceed to dedup.
->
-> **Rung 2 — WebFetch on listing URL:**
-> If a `cadremploi.fr/emploi/...` URL is found, call WebFetch. If blocked or empty: proceed to Rung 3.
->
-> **Rung 3 — Manual check fallback:**
-> Log under "Cadremploi — manual check needed" in the digest with the Gmail thread link and snippet.
-
-**Search 3 — Recruiter/direct outreach (not labelled):**
-```
--label:jobs -from:offres@diffusion.apec.fr subject:(candidature OR opportunité OR poste OR recrutement OR "Finance Director" OR "Directeur Financier" OR "FP&A" OR "Contrôleur de Gestion") after:YYYY/MM/DD before:YYYY/MM/DD
+**Query B — Manual check rows** (HTML-only, route directly to review_queue):
+```sql
+SELECT * FROM listing_inbox
+WHERE parse_date=$1 AND parse_status='manual_check'
+ORDER BY created_at ASC
 ```
 
-Read each matched thread via `get_thread`.
+**If both return 0 rows:**
+```sql
+SELECT COUNT(*)::int AS total FROM listing_inbox WHERE parse_date=$1
+```
+- `total > 0` → all rows already processed. Note "already done" in digest and continue to next date.
+- `total = 0` → pre-processor never ran. Note "⚠️ No listing_inbox rows for [date] — run /job-email-inbox [MM/DD/YY]" and continue.
 
 ---
 
-## Step 3 — Extract Individual Job Listings
+## Step 3 — Route manual_check rows to review_queue
 
-From each email, extract every distinct job listing.
+For each row from Query B:
 
-**Alert keyword extraction (do this once per thread, before extracting listings):**
-Parse the thread subject to extract the alert search term. Try these patterns in order:
-1. French: `"pour (.+?) (?:à|en|dans|sur)"` → keyword = match group 1
-2. French alt: `"(?:alerte emploi|offres?)\s*:?\s*(.+)"` → keyword = match group 1
-3. English: `"for (.+?) (?:near|in|at)"` → keyword = match group 1
-4. Fallback: derive from sender domain — `jobalert.indeed.com` → `"Indeed"`, `linkedin.com` → `"LinkedIn"`, `alertes.cadremploi.fr` → `"Cadremploi"`, `offres@diffusion.apec.fr` → `"APEC"`
+**Dedup check:**
+```sql
+SELECT id FROM review_queue
+WHERE gmail_thread_url=$1 AND notes ILIKE '%UNREADABLE%'
+LIMIT 1
+```
+If found → skip (already queued).
 
-Clean the result: trim whitespace, strip trailing punctuation. Store as `alert_keyword`.
-Apply this value to every listing extracted from this thread.
+**If not queued — INSERT:**
+```sql
+INSERT INTO review_queue
+(job_title,company,source,location,salary,priority,status,date_added,
+ job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+RETURNING id
+```
+Values: `job_title`=row.job_title, `company`='Not disclosed', `source`=row.source, `location`=null, `salary`=null, `priority`='B', `status`='Needs Info', `date_added`=row.parse_date, `job_url`=row.job_url, `gmail_thread_url`=row.gmail_thread_url, `red_flags`='[]', `missing_info`='["Full JD"]', `alert_keyword`=row.alert_keyword, `notes`='UNREADABLE: '+row.parse_notes+' — open Gmail link to review and paste JD', `english`=false.
 
-For each listing, extract:
-- Job title
-- Company name (or "Not disclosed" if agency)
-- Location (city)
-- Salary (if stated)
-- Job URL / apply link — **always extract a clean, storable URL using this priority:**
-  1. If the URL contains `jk=XXXXXXX` → extract the jk value and store `https://fr.indeed.com/viewjob?jk=XXXXXXX`. This is the canonical, stable URL.
-  2. If the URL is a short Indeed link (`to.indeed.com/...`) → store it as-is.
-  3. If the URL is a LinkedIn job URL → store it as-is.
-  4. If no URL at all → store `"Not available"` explicitly. **Never leave the field blank.**
-- Contract type (CDI / CDD / Interim)
-- Gmail Thread URL: `https://mail.google.com/mail/u/0/#all/<threadId>` — always populate
+**After INSERT → mark processed:**
+```sql
+UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
+```
 
 ---
 
-## Step 4 — Deduplicate Against Supabase
+## Step 4 — Analyse pending rows
 
-**Pre-dedup title normalisation:**
-Before searching, expand known abbreviations in both the extracted title and the search string:
-- RAF ↔ Responsable Administratif Financier
-- DAF ↔ Directeur Administratif Financier
-- CDG ↔ Contrôleur de Gestion
-- FBP ↔ Finance Business Partner
-Search for both the original and expanded forms if the title contains one of these.
+Process each row from Query A one by one.
 
-**Standard dedup check (run via Bash+node for each extracted listing):**
+### 4a — Dedup check
+
+Expand abbreviations before searching: RAF ↔ Responsable Administratif Financier, DAF ↔ Directeur Administratif Financier, CDG ↔ Contrôleur de Gestion, FBP ↔ Finance Business Partner.
+
 ```sql
 SELECT id FROM job_applications
-WHERE company ILIKE $1
-  AND job_title ILIKE $2
+WHERE company ILIKE $1 AND job_title ILIKE $2
   AND date_added >= CURRENT_DATE - INTERVAL '30 days'
 UNION
 SELECT id FROM review_queue
-WHERE company ILIKE $1
-  AND job_title ILIKE $2
+WHERE company ILIKE $1 AND job_title ILIKE $2
   AND date_added >= CURRENT_DATE - INTERVAL '30 days'
 LIMIT 1
 ```
+Pass `['%<company>%', '%<title_root>%']`. Match → duplicate, skip, mark listing_inbox row as processed.
 
-Pass `['%<company>%', '%<title_root>%']`. If any row returned → duplicate, skip. Log as duplicate in digest.
-
-**URL confirmation (second pass — only when company matches but title is ambiguous):**
-Extract the job ID from both URLs:
-- Indeed: `jk=` value (strip leading zeros before comparing)
-- LinkedIn: numeric job ID from `linkedin.com/jobs/view/[ID]/`
-
+URL confirmation (when title is ambiguous):
 ```sql
 SELECT id FROM job_applications WHERE job_url ILIKE $1
 UNION
 SELECT id FROM review_queue WHERE job_url ILIKE $1
 LIMIT 1
 ```
+Match → duplicate, skip.
 
-If job IDs match → duplicate. Skip.
-
-**Catch-up overlap warning:**
-When $ARGUMENTS contains a date range (catch-up mode), before processing each date use `notion-search` to find a subpage titled "Job Alert Scan — [YYYY-MM-DD]" under the Daily Scans archive page. If found → the trigger already scanned that date. Prepend: `⚠️ This date was already scanned by the trigger — check Notion for any duplicates.`
-
-Only process listings that pass the dedup check.
-
----
-
-## Step 5 — Analyse Each New Listing
-
-Apply the same criteria as `/job-search` for each new listing.
-
-**Rescue gate (apply FIRST)**: Alert emails and Indeed postings routinely omit salary, hybrid policy, and full scope. Do NOT downgrade plausible finance matches to C or Skip just because the listing is incomplete.
+### 4b — Rescue gate (apply BEFORE standard ranking)
 
 If ALL of the following are true:
 1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level)
-2. Location is 🟢 Green, 🟡 Yellow, or 🌐 Remote
+2. Location is Green, Yellow, or Remote
 3. No hard disqualifier (Paris on-site, explicitly junior, wrong function, salary stated below €45K)
 
-...AND any of Salary, Hybrid policy, Full scope, or Company name is missing, route to review queue:
-- `status = 'Needs Info'`
-- `priority = 'B'` (provisional)
-- `missing_info` = array of missing fields (e.g. `["Salary","Hybrid policy"]`)
-- `notes` = start with `"QUEUED:"` followed by a one-line summary of what is needed
+…AND any of Salary, Hybrid policy, Full scope, or Company name is missing:
+→ `status='Needs Info'`, `priority='B'`, `missing_info`=list of missing fields, `notes` starts with `'QUEUED:'`
 
-Only if the listing has enough information to rank it does Step 5 proceed to the standard A/B/C/Skip assignment below.
+**Tiebreaker:** When genuinely unclear, always route to Needs Info. Only assign Dismissed when a disqualifier is unambiguous.
 
-**Tiebreaker rule:** When it is genuinely unclear whether a listing clears the rescue gate, always route to `Needs Info`. The cost of a false-negative (missed application) is higher than the cost of a false-positive (30 seconds in `/job-review`). Only assign Dismissed or C when a disqualifier is unambiguous — not just probable.
+### 4c — Standard priority criteria (fully-populated listings only)
 
----
-
-### Standard priority criteria
-
-**Candidate profile**: Finance Director / FP&A, Grenoble base, English preference, salary floor €55K
-
-**Location zones** (from config `location_zones`):
-- 🟢 Green (0–25 min): Grenoble, Échirolles, Meylan, Saint-Égrève, Pont-de-Claix, Montbonnot, Crolles, Voreppe, Bernin, Saint-Martin-d'Hères, and all dept 38 core towns
-- 🟡 Yellow (30–50 min): Voiron, Moirans, Chambéry, Saint-Marcellin, Pontcharra
-- 🟠 Orange (1h–1h45): Valence, Annecy, Ugine, Faverges, Cluses, Bourg-en-Bresse, Albertville
-- 🔴 Red (1h15+ / no hybrid): Lyon, La Tour-en-Maurienne, Paris, Luxembourg
-- Dept 73: check specific town. Dept 01: usually Orange/Red.
+**Location zones** (from config):
+- Green (0–25 min): Grenoble, Échirolles, Meylan, Saint-Égrève, Pont-de-Claix, Montbonnot, Crolles, Voreppe, Bernin, Saint-Martin-d'Hères, dept 38 core towns
+- Yellow (30–50 min): Voiron, Moirans, Chambéry, Saint-Marcellin, Pontcharra
+- Orange (1h–1h45): Valence, Annecy, Ugine, Faverges, Cluses, Bourg-en-Bresse, Albertville
+- Red (1h15+ / no hybrid): Lyon, Paris, Luxembourg
 
 **Priority rules:**
-- 🟢 A: Senior finance/FP&A/controlling, Green or Yellow zone, CDI, English exposure, ≥€55K → write to `job_applications` with `status = 'To Apply'`
-- 🟡 B: Good fit on 3/4 criteria; or Tier A company with one weakness → write to `review_queue` with `status = 'To Assess'`
-- 🔴 C: Multiple mismatches or one disqualifying factor → write to `review_queue` with `status = 'To Assess'`
-- ⛔ Dismissed: Definitive disqualifier (Paris on-site, clearly junior, <€40K stated, unrelated role) → write to `job_applications` with `status = 'Dismissed'`, populate `red_flags` with reason(s), set `notes = 'Auto-dismissed: [reason]'`
+- **A**: Senior finance/FP&A/controlling, Green or Yellow, CDI, English exposure, ≥€55K → `job_applications` `To Apply`
+- **B**: Good fit on 3/4 criteria → `review_queue` `To Assess`
+- **C**: Multiple mismatches or one disqualifying factor → `review_queue` `To Assess`
+- **Dismissed**: Definitive disqualifier (Paris on-site, clearly junior, <€40K stated, unrelated role) → `job_applications` `Dismissed`, populate `red_flags`, `notes='Auto-dismissed: [reason]'`
 
-**Red flags to check:**
-- Salary below €55K or not disclosed
-- French-only role at international company
-- Scope below Director level
-- Orange/Red zone without hybrid confirmed
-- Agency opacity (no company name, vague scope)
-- CDD/interim without strong justification
+### 4d — Pre-write enrichment (Needs Info rows only)
 
----
+- **Rung 1 — Indeed API**: if `job_url` contains `jk=`, call `mcp__claude_ai_Indeed__get_job_details`. If successful → extract salary, contract type, hybrid/remote, seniority, scope, language. Re-rank if all gaps filled.
+- **Rung 2 — WebFetch**: if `job_url` exists and is not LinkedIn, fetch it. Extract structured fields only. Re-rank if gaps filled.
+- **Rung 3 — LinkedIn short-circuit**: if `job_url` is LinkedIn → skip enrichment, write as Needs Info unchanged.
+- **Rung 4 — No URL / all failed**: write as Needs Info unchanged.
 
-## Step 5B — Pre-Write Enrichment (for Needs Info listings only)
+Context-hygiene: discard full JD text after extracting fields.
 
-Before writing any listing flagged as `Needs Info`, attempt to fill in missing fields immediately.
-
-**Only run this step for listings routed to `status = 'Needs Info'`.** Skip for ranked and Dismissed listings.
-
-Try in order. Stop as soon as one attempt succeeds and fills at least one missing field.
-
-**Rung 1 — Indeed API (for Indeed URLs only):**
-If `Job URL` contains `jk=`, extract the job ID and call `mcp__claude_ai_Indeed__get_job_details`.
-- If successful: extract salary, contract type, hybrid/remote policy, seniority, scope, language requirements.
-- If enrichment resolves ALL missing fields: re-rank using Step 5 criteria. Change `status` to `To Assess` (or `To Apply` if Priority A). Clear `missing_info`.
-- If the call errors or returns no useful data: continue to Rung 2.
-
-**Rung 2 — WebFetch (non-LinkedIn, non-Indeed, or if Rung 1 failed):**
-If `Job URL` exists and is not LinkedIn, call WebFetch:
-> "Extract salary, contract type, location, hybrid/remote policy, seniority, scope of role, language requirements. Return as structured fields only."
-- Same handling as Rung 1 success above.
-- If blocked/empty/404: continue to Rung 3.
-
-**Rung 3 — LinkedIn short-circuit:**
-If `Job URL` is LinkedIn, skip enrichment entirely. Write to review_queue as `Needs Info` unchanged.
-
-**Rung 4 — No URL / all rungs failed:**
-Write to review_queue as `Needs Info` unchanged.
-
-**Context-hygiene:** Discard full JD text after extracting fields. Store only the structured fields that fill gaps in notes.
-
----
-
-## Step 6 — Write to Supabase
-
-Write **every** listing to Supabase — including dismissed ones. No listing is silently discarded.
-
-**Routing table:**
+### 4e — Write to Supabase
 
 | Outcome | Table | Status |
 |---|---|---|
-| Priority A (all data present) | `job_applications` | `To Apply` |
-| Priority B / C (ranked) | `review_queue` | `To Assess` |
-| Rescue gate triggered (missing info) | `review_queue` | `Needs Info` |
-| Dismissed (definitive disqualifier) | `job_applications` | `Dismissed` |
+| Priority A | `job_applications` | `To Apply` |
+| Priority B/C | `review_queue` | `To Assess` |
+| Rescue gate (Needs Info) | `review_queue` | `Needs Info` |
+| Dismissed | `job_applications` | `Dismissed` |
 
-**For `review_queue` rows** (To Assess, Needs Info):
+**For review_queue rows:**
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
@@ -298,7 +187,7 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
 
-**For `job_applications` rows** (To Apply, Dismissed):
+**For job_applications rows:**
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,date_added,
@@ -307,20 +196,25 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 RETURNING id
 ```
 
-**Field values:**
-- `source`: `'Indeed'` / `'LinkedIn'` / `'Direct'` / `'Other'` (derived from email sender)
-- `date_added`: the **SCAN DATE** as `'YYYY-MM-DD'` (yesterday for a default run, not today)
-- `red_flags`: `JSON.stringify([...])` — valid values: `"Low salary"`, `"French only"`, `"No hybrid"`, `"Far location"`, `"Fixed-term"`, `"Junior scope"`, `"Off-topic"`
-- `missing_info`: `JSON.stringify([...])` — valid values: `"Salary"`, `"Hybrid policy"`, `"Scope"`, `"Full JD"`, `"Company name"`
-- `english`: `true` if English mentioned, `false` otherwise (boolean — not a string)
-- `cv_approach`: assign for job_applications only — `'FP&A Focus'` / `'Cost Control Focus'` / `'Standard'` / `'Transformation Focus'`
-- `job_description`: full JD text truncated to ~4000 chars if needed. Leave null only if no JD was obtainable.
+Field notes:
+- `date_added` = `row.parse_date` (the email date, not today)
+- `source` = `row.source` (from listing_inbox)
+- `red_flags` = `JSON.stringify([...])` — valid values: `"Low salary"`, `"French only"`, `"No hybrid"`, `"Far location"`, `"Fixed-term"`, `"Junior scope"`, `"Off-topic"`
+- `missing_info` = `JSON.stringify([...])` — valid values: `"Salary"`, `"Hybrid policy"`, `"Scope"`, `"Full JD"`, `"Company name"`
+- `english` = boolean
+- `cv_approach` (job_applications only): `'FP&A Focus'` / `'Cost Control Focus'` / `'Standard'` / `'Transformation Focus'`
+- `job_description` = full JD text truncated to ~4000 chars; null if unobtainable
+
+### 4f — Mark processed
+
+After each successful INSERT:
+```sql
+UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
+```
 
 ---
 
-## Step 6B — Application Response Check (runs once per daily scan, not per date)
-
-After completing all date iterations, run this check once for all active applications.
+## Step 5 — Application response check (runs once, after all dates)
 
 **Fetch active applications:**
 ```sql
@@ -329,30 +223,28 @@ FROM job_applications
 WHERE status IN ('Applied', 'Interview')
 ```
 
-**For each, search Gmail for response emails:**
+**For each, search Gmail:**
 ```
 "[Company]" (entretien OR interview OR candidature OR retenu OR sélectionné OR refusé OR rejected OR suite OR félicitations OR offer) after:YYYY/MM/DD -label:jobs
 ```
-Use the row's `date_applied` (or `date_added` as fallback) formatted as `YYYY/MM/DD` for `after:`.
+Use `date_applied` (or `date_added` as fallback) for `after:`.
 
-**Classify any found thread:**
-- **Interview** → subject/body contains: entretien, interview, rendez-vous, call, visio, rencontrer
-- **Offer** → contains: offre, proposition, félicitations, offer letter, package
-- **Rejected** → contains: refusé, ne correspond pas, other candidates, poursuivons sans, candidature n'a pas été retenue
-- **Unknown** → can't classify — include in digest for manual review
+**Classify response:**
+- Interview → entretien, interview, rendez-vous, call, visio
+- Offer → offre, proposition, félicitations, offer letter
+- Rejected → refusé, ne correspond pas, other candidates, poursuivons sans
+- Unknown → include in digest for manual review
 
-**Update Supabase for any responses found:**
+**Update Supabase on match:**
 ```sql
 UPDATE job_applications
-SET status=$1,
-    date_response=CURRENT_DATE,
+SET status=$1, date_response=CURRENT_DATE,
     notes=COALESCE(notes,'')||$2,
     gmail_thread_url=COALESCE(NULLIF(gmail_thread_url,''),$3)
 WHERE id=$4
 ```
-Pass `[new_status, ' | [Status] detected by daily scan [date]', thread_url, row_id]`.
 
-**Auto-expiry (Applied rows only):**
+**Auto-expiry:**
 ```sql
 UPDATE job_applications
 SET status='Dismissed',
@@ -362,70 +254,20 @@ WHERE status='Applied'
   AND COALESCE(notes,'') NOT LIKE '%Auto-expired%'
 RETURNING id, job_title, company
 ```
-Do NOT alert Zack for auto-expiries — log them in the digest only.
+Log in digest only — do not alert.
 
-**Follow-up nudge (runs after response check):**
-
-For each `Applied` row where:
-- date_applied is between 14 and 45 days ago
-- No response found in Gmail during this check
-- notes field does NOT contain "follow-up sent" or "relance" (case-insensitive)
-
-Add to the digest under a **"Consider Following Up"** section:
-- "[Title] @ [Company] — applied [N] days ago, no response detected"
-
-Do NOT change Status or Notes. Do NOT include rows already auto-expired (>60 days).
+**Follow-up nudge:** for Applied rows 14–45 days old with no Gmail response found and no "follow-up sent"/"relance" in notes → add to digest under "Consider Following Up". Do NOT update status or notes.
 
 ---
 
-## Step 7 — Create Scan Subpage in Daily Scans Archive
+## Step 6 — Write scan_archive + send Gmail draft digest
 
-After processing all listings for a date, create a **new subpage** under the Daily Scans archive page — one subpage per scan date.
+### 6a — scan_archive
 
-**Daily Scans archive page ID:** from config `notion.daily_scans_archive`
-
-Call `notion-create-pages` with:
-```
-parent: { type: "page_id", page_id: "[daily_scans_archive from config]" }
-title: "Job Alert Scan — YYYY-MM-DD"   ← the SCAN DATE (yesterday for a default run), not today
-```
-
-Then call `notion-update-page` to write the content body:
-
-```markdown
-📊 **[N] new listings today  ·  [N] pursued  ·  [N] dismissed**
-*(+[N] duplicates already in Supabase — not counted in today's totals)*
-
-**Written to Supabase:** [N]  ·  **Queued for review:** [N]
-
-### By Priority
-- 🟢 A: [N] — [titles if any]
-- 🟡 B: [N] — [titles if any]
-- 🔴 C: [N]
-- ⏸️ Needs Info: [N]
-- ⛔ Dismissed: [N] — top reason: [most common Red Flag among dismissed rows]
-
-### Sources
-[Breakdown: LinkedIn N, Indeed email N, APEC N, WTTJ N, Cadremploi N, Direct/recruiter N, etc.]
-
-### Needs Info Queue (added today)
-- [Title] @ [Company] — missing: [Salary, Hybrid policy, ...]
-- [Title] @ [Company] — missing: [Full JD]
-
-### Notable Listings
-- [2–3 bullet points for any Priority A finds, or interesting B listings]
-```
-
-If no new listings were found, write instead:
-```markdown
-No new job listings found in alerts for this date.
-```
-
-**Also write a row to scan_archive:**
 ```sql
 INSERT INTO scan_archive
 (scan_date, digest_text, total_found, potentially_apply, needs_info, to_assess, dismissed)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
 ON CONFLICT (scan_date) DO UPDATE SET
   digest_text=EXCLUDED.digest_text,
   total_found=EXCLUDED.total_found,
@@ -434,4 +276,49 @@ ON CONFLICT (scan_date) DO UPDATE SET
   to_assess=EXCLUDED.to_assess,
   dismissed=EXCLUDED.dismissed
 ```
-Pass `[scan_date, digest_summary_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count]`.
+Pass `[scan_date, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count]`.
+
+`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows + manual_check rows routed in Step 3.
+
+### 6b — Gmail draft digest
+
+Call `mcp__claude_ai_Gmail__create_draft` with:
+- `to`: `zberlo12@gmail.com`
+- `subject`: `Job Scan Digest — [scan_date]` (if multiple dates: `Job Scan Digest — [first_date] to [last_date]`)
+- `body`: plain text, one section per scan date:
+
+```
+Job Scan Digest — YYYY-MM-DD
+════════════════════════════
+
+[N] new listings · [N] pursued · [N] dismissed
+(+[N] duplicates skipped)
+
+By Priority
+  A → To Apply:      [N]  [titles if any]
+  B/C → To Assess:   [N]
+  Needs Info:        [N]
+  Dismissed:         [N]  top reason: [most common red flag]
+
+Sources: LinkedIn [N] · Indeed [N] · APEC [N] · Cadremploi [N] · Direct [N]
+
+Needs Info Queue (added today)
+  • [title] @ [company] — missing: [fields]  (Gmail: [url])
+  • [title] @ [company] — UNREADABLE: [source]  (Gmail: [url])
+
+[If Priority A rows:]
+Notable
+  • [title] @ [company] — [one-line reason]
+
+[If response check found anything:]
+Application Updates
+  • [title] @ [company] — [new status]
+
+[If follow-up nudge rows:]
+Consider Following Up
+  • [title] @ [company] — applied [N] days ago
+
+scan_archive: written ✅
+```
+
+If no listings were found for a date, write: `No new listings for YYYY-MM-DD.`
