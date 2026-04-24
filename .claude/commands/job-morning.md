@@ -1,7 +1,7 @@
 ---
 description: Morning digest — shows what last night's scan found and the current pipeline state. Run this first every session before /job-review or /job-apply. Trigger with /job-morning.
 argument-hint: blank
-allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, Bash
+allowed-tools: Bash
 ---
 
 ## Step 0 — Load Config
@@ -9,7 +9,6 @@ allowed-tools: mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__noti
 Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
-- `notion.daily_scans_archive` → Daily Scans archive page ID
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
 ```bash
@@ -27,16 +26,20 @@ c.connect()
 
 Run all three data fetches in parallel:
 
-**A. Scan subpage (Notion — stays as archive):**
+**A. Last scan (scan_archive):**
 
-Use `notion-search` to find a page titled exactly "Job Alert Scan — [yesterday's date in YYYY-MM-DD format]" under the Daily Scans archive page (ID from config `notion.daily_scans_archive`). If found, fetch it and read the digest content to extract:
-- Total new listings found
-- Counts by Status: Potentially Apply, Needs Info, To Assess, Dismissed
+```sql
+SELECT scan_date, total_found, potentially_apply, needs_info, to_assess, dismissed
+FROM scan_archive
+WHERE scan_date >= CURRENT_DATE - INTERVAL '2 days'
+ORDER BY scan_date DESC
+LIMIT 1
+```
 
-Also search for "Job Alert Scan — [two days ago]" as a fallback.
+If a row is found → use `total_found`, `potentially_apply`, `needs_info`, `to_assess`, `dismissed` directly. Note the `scan_date` in the output so it's clear if the data is from yesterday or the day before.
 
-If no subpage exists: set all scan counts to "?" and add a warning:
-`⚠️ No scan subpage found for today or yesterday — the nightly scan may have failed. Run /job-search-daily-scan manually.`
+If no rows → set all scan counts to "?" and show:
+`⚠️ No scan data found — the nightly scan may not have run yet. Run /job-search-daily-scan manually.`
 
 **B. Review Queue counts (Supabase):**
 
@@ -97,7 +100,7 @@ SUGGESTED NEXT STEP
 ════════════════════════════════════
 ```
 
-If no scan subpage was found, show the ⚠️ warning in the LAST NIGHT'S SCAN section and still show the Review Queue and pipeline snapshot.
+If no scan_archive row was found, show the ⚠️ warning in the LAST NIGHT'S SCAN section and still show the Review Queue and pipeline snapshot.
 
 The suggested next step should be the single most impactful action:
 - Review Queue total > 0 → `/job-review` (takes priority over everything else)
