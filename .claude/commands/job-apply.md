@@ -1,7 +1,7 @@
 ---
-description: Draft a tailored CV and cover letter for a specific job application. Fetches the job row from Supabase and candidate knowledge base from Notion, asks targeted questions if anything is missing, then writes tailored CV + cover letter + notes to a new Notion page linked back to the job row. Trigger with /job-apply or when Zack is ready to prepare documents for a listing.
+description: Draft a tailored CV and cover letter for a specific job application. Fetches the job row and candidate knowledge base from Supabase, asks targeted questions if anything is missing, then writes tailored CV + cover letter + notes to a Notion page and runs Word populate scripts. Trigger with /job-apply or when Zack is ready to prepare documents for a listing.
 argument-hint: Blank (→ list all "To Apply" rows to pick from), a number from that list, or a company/title search string
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Google_Drive__list_recent_files, mcp__claude_ai_Google_Drive__search_files, mcp__claude_ai_Google_Drive__create_file, Bash
+allowed-tools: mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Google_Drive__list_recent_files, mcp__claude_ai_Google_Drive__search_files, mcp__claude_ai_Google_Drive__create_file, Bash
 ---
 
 # Job Apply — Document Drafter
@@ -11,11 +11,9 @@ allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notio
 Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
-- `user.name`, `user.salary_floor_apply` → name, salary floor
-- `notion.candidate_profile_id` → Candidate Profile page ID
-- `notion.cv_templates_id` → CV Templates parent page ID
-- `notion.application_docs_id` → Application Documents parent page ID
+- `user.name`, `user.email`, `user.salary_floor_apply` → name, email, salary floor
 - `cv_approaches` → CV approach options and flags
+- `notion.application_docs_id` → Application Documents parent page ID
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
 ```bash
@@ -108,32 +106,73 @@ If any fail: display summary and ask to confirm override. If confirmed, note it 
 
 ## Step 2 — Load Resources in Parallel
 
-**A. Candidate Knowledge (Notion)**
-`notion-fetch` the Candidate Profile page (ID from config `notion.candidate_profile_id`).
-Extract: metrics, highlights, talking points, Cover Letter Writing Rules. These rules are mandatory constraints on every CL draft.
+Run all queries in parallel via Bash.
 
-**B. Base CV Template (Notion)**
+**A. Candidate Profile**
+```sql
+SELECT id, full_name, phone, location, linkedin_url,
+       salary_target_min, salary_target_max, availability_weeks, language_notes,
+       experience_summary, fp_and_a_highlights, cost_control_highlights, p2p_highlights,
+       cl_rules, tone_profile
+FROM candidate_profile
+WHERE user_email=$1
+```
+Pass `[config.user.email]`.
+
+Then fetch supporting tables using the returned `id` as `profile_id`:
+```sql
+SELECT category, label, value, context FROM candidate_metrics
+WHERE profile_id=$1 ORDER BY sort_order
+```
+```sql
+SELECT topic, content FROM candidate_talking_points
+WHERE profile_id=$1 ORDER BY sort_order
+```
+```sql
+SELECT question, answer FROM role_specific_answers
+WHERE profile_id=$1 AND company ILIKE $2
+```
+Pass `[profile_id, '%<company>%']` — loads any pre-saved answers for this company.
+
+The `cl_rules` and `tone_profile` fields are **mandatory constraints** on every CL draft. Read them in full before writing a single word of the CL.
+
+**B. Base CV Template**
 Detect JD language: French JD → `FR`, English JD → `EN`, bilingual → `FR`.
-Map CV Approach + language to template title: `"CV — [Approach Name] — [LANG]"` (e.g. "CV — FP&A Focus — FR").
+```sql
+SELECT content FROM cv_templates
+WHERE cv_approach=$1 AND language=$2
+LIMIT 1
+```
+Pass `[row.cv_approach, language_code]`.
 
-`notion-search` for that title under CV Templates parent page (`notion.cv_templates_id`), then `notion-fetch` the result.
-
-**Fallback:** If language-specific page not found, search without language suffix. If still not found, ask to paste base CV text.
+Fallback: if no row, retry with `language='FR'`. If still empty, ask to paste base CV text.
 
 **C. CL Examples (style reference)**
-`notion-search` for pages under CV Templates parent containing "CL" or "Example" in the title. Fetch up to 3. Use for tone, structure, and framing only — do not copy content.
+```sql
+SELECT name, company, content FROM cl_examples
+WHERE language=$1
+ORDER BY created_at DESC
+LIMIT 3
+```
+Pass `[language_code]`. Use for tone, structure, and framing only — do not copy content.
 
 ---
 
 ## Step 3 — Pre-draft Questions (upfront, never mid-draft)
 
-Check Candidate Profile and job requirements together. If any meaningful gaps:
+Check candidate profile and job requirements together. Skip any question already answered in `role_specific_answers` from Step 2A.
 
+If any meaningful gaps remain:
 > "Before I draft, I need a few details not yet in your profile:
 > 1. [Question]
 > (If any don't apply, just say 'N/A')"
 
-Ask ALL in one block. After receiving answers, append to Candidate Profile page via `notion-update-page`.
+Ask ALL in one block. After receiving answers, save each to Supabase:
+```sql
+INSERT INTO role_specific_answers (profile_id, company, role, question, answer)
+VALUES ($1, $2, $3, $4, $5)
+```
+Pass `[profile_id, company, job_title, question, answer]` for each answer received.
 
 ---
 
@@ -150,11 +189,16 @@ Ask ALL in one block. After receiving answers, append to Candidate Profile page 
 
 Always drafted from scratch — never recycled or generic.
 
-1. **Opening** (2–3 sentences): Why this specific company and role. Reference something concrete.
-2. **Body** (2 short paragraphs): Map 2–3 specific examples to the JD's key requirements. Name company, scope, and result.
-3. **Close** (2 sentences): Proactive, not passive.
+Apply `cl_rules` and `tone_profile` from Step 2A in full. Key rules:
+- Adapt positioning block to the role type (DAF/CFO, CDG/FP&A, Operational, PM, Buyer — see cl_rules)
+- NEWP paragraph must include at least two concrete metrics
+- Tailor Schneider paragraph to the role type — do NOT copy P2P framing into a CDG role
+- The CL must not sound AI-generated or over-tailored — one honest qualification or partial-fit acknowledgement is better than perfect alignment to every JD bullet
+- Match language to JD; use Raydiall CL as tone benchmark
 
-Language: match the JD. Tone: confident and direct.
+1. **Opening** (2–3 sentences): Reference JD directly — "Votre offre de [titre] chez [Company]..." — not the company from outside.
+2. **Body** (2 short paragraphs): NEWP (metrics-anchored) → Schneider ("Plus récemment" transition). Add bridge paragraph if background doesn't map directly.
+3. **Close**: "Je serais ravi..." + availability/location sentence.
 
 ---
 
