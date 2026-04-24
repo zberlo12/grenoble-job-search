@@ -169,8 +169,9 @@ For each Group A row that couldn't be auto-enriched, work through one at a time:
 [N/M] **[Job Title]** @ [Company]
 📍 [Location]  ·  💰 [Salary or "Not stated"]  ·  Source: [Source]
 Missing: [missing_info values]
-QUEUED note: [first line of Notes after "QUEUED:"]
-🔗 [Job URL if available]
+QUEUED note: [first line of Notes after "QUEUED:" or "UNREADABLE:"]
+🔗 Job URL: [url or "Not available"]
+📧 Gmail thread: [gmail_thread_url] ← always show, even if job_url exists (APEC alerts are only findable via Gmail)
 ```
 
 > "Paste the full job description, or type `skip` to leave it queued, or `dismiss` to move it to Dismissed."
