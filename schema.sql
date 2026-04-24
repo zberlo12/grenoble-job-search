@@ -169,3 +169,78 @@ CREATE TABLE listing_inbox (
 CREATE INDEX idx_inbox_parse_date   ON listing_inbox(parse_date);
 CREATE INDEX idx_inbox_parse_status ON listing_inbox(parse_status);
 CREATE INDEX idx_inbox_source       ON listing_inbox(source);
+
+-- ─── candidate_profile ───────────────────────────────────────────────────────
+CREATE TABLE candidate_profile (
+    id                      SERIAL PRIMARY KEY,
+    user_email              TEXT NOT NULL UNIQUE,
+    full_name               TEXT,
+    phone                   TEXT,
+    location                TEXT,
+    linkedin_url            TEXT,
+    salary_target_min       INT,
+    salary_target_max       INT,
+    availability_weeks      INT,
+    language_notes          TEXT,
+    experience_summary      TEXT,
+    fp_and_a_highlights     TEXT,
+    cost_control_highlights TEXT,
+    p2p_highlights          TEXT,
+    cl_rules                TEXT,
+    tone_profile            TEXT,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─── candidate_metrics ───────────────────────────────────────────────────────
+CREATE TABLE candidate_metrics (
+    id          SERIAL PRIMARY KEY,
+    profile_id  INT NOT NULL REFERENCES candidate_profile(id) ON DELETE CASCADE,
+    category    TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    context     TEXT,
+    sort_order  INT DEFAULT 0
+);
+
+-- ─── candidate_talking_points ────────────────────────────────────────────────
+CREATE TABLE candidate_talking_points (
+    id          SERIAL PRIMARY KEY,
+    profile_id  INT NOT NULL REFERENCES candidate_profile(id) ON DELETE CASCADE,
+    topic       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    sort_order  INT DEFAULT 0
+);
+
+-- ─── role_specific_answers ───────────────────────────────────────────────────
+CREATE TABLE role_specific_answers (
+    id          SERIAL PRIMARY KEY,
+    profile_id  INT NOT NULL REFERENCES candidate_profile(id) ON DELETE CASCADE,
+    company     TEXT NOT NULL,
+    role        TEXT,
+    question    TEXT NOT NULL,
+    answer      TEXT NOT NULL
+);
+
+-- ─── cv_templates ────────────────────────────────────────────────────────────
+CREATE TABLE cv_templates (
+    id             SERIAL PRIMARY KEY,
+    name           TEXT NOT NULL,
+    cv_approach    TEXT,
+    language       CHAR(2) NOT NULL DEFAULT 'FR',
+    content        TEXT,
+    notion_page_id TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─── cl_examples ─────────────────────────────────────────────────────────────
+CREATE TABLE cl_examples (
+    id             SERIAL PRIMARY KEY,
+    name           TEXT NOT NULL,
+    company        TEXT,
+    language       CHAR(2) NOT NULL DEFAULT 'FR',
+    content        TEXT NOT NULL,
+    notion_page_id TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+);
