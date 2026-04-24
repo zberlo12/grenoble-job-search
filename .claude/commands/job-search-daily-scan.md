@@ -92,11 +92,11 @@ If found → skip (already queued).
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
- job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+ job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,listing_inbox_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
-Values: `job_title`=row.job_title, `company`='Not disclosed', `source`=row.source, `location`=null, `salary`=null, `priority`='B', `status`='Needs Info', `date_added`=row.parse_date, `job_url`=row.job_url, `gmail_thread_url`=row.gmail_thread_url, `red_flags`='[]', `missing_info`='["Full JD"]', `alert_keyword`=row.alert_keyword, `notes`='UNREADABLE: '+row.parse_notes+' — open Gmail link to review and paste JD', `english`=false.
+Values: `job_title`=row.job_title, `company`='Not disclosed', `source`=row.source, `location`=null, `salary`=null, `priority`='B', `status`='Needs Info', `date_added`=row.parse_date, `job_url`=row.job_url, `gmail_thread_url`=row.gmail_thread_url, `red_flags`='[]', `missing_info`='["Full JD"]', `alert_keyword`=row.alert_keyword, `notes`='UNREADABLE: '+row.parse_notes+' — open Gmail link to review and paste JD', `english`=false, `listing_inbox_id`=row.id.
 
 **After INSERT → mark processed:**
 ```sql
@@ -182,8 +182,8 @@ Context-hygiene: discard full JD text after extracting fields.
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
- job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+ job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description,listing_inbox_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 RETURNING id
 ```
 
@@ -191,8 +191,8 @@ RETURNING id
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,date_added,
- job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+ job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description,listing_inbox_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 RETURNING id
 ```
 
