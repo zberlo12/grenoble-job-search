@@ -289,6 +289,37 @@ Log in digest only — do not alert.
 
 **Follow-up nudge:** for Applied rows 14–45 days old with no Gmail response found and no "follow-up sent"/"relance" in notes → add to digest under "Consider Following Up". Do NOT update status or notes.
 
+**Human contact detection:** For each response email found (Interview, Offer, Rejected, or Unknown), check whether the sender is a real person — not an automated address. Automated indicators: sender address contains `noreply`, `no-reply`, `donotreply`, `notifications`, `mailer`, `alert`, `automatique`, `auto`, `careers@`, `jobs@`, or the message has no human signature block.
+
+If the sender appears to be a named human (e.g. a recruiter, HR contact, or hiring manager):
+1. Extract: full name, role/title (from signature if present), company name, email address.
+2. Upsert into `networking_contacts`:
+
+```sql
+INSERT INTO networking_contacts
+  (name, company, role, email, last_contact, source, notes)
+VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5)
+ON CONFLICT (email) DO UPDATE SET
+  last_contact = EXCLUDED.last_contact,
+  notes = COALESCE(networking_contacts.notes, '') || ' | ' || EXCLUDED.notes
+RETURNING id
+```
+
+Pass `[name, company, role_or_null, email, 'Auto-detected from ' || application_status || ' response — ' || job_title || ' @ ' || company]`.
+
+If the table has no `email` unique constraint, fall back to name+company dedup:
+```sql
+INSERT INTO networking_contacts
+  (name, company, role, email, last_contact, source, notes)
+VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5)
+ON CONFLICT (name, company) DO UPDATE SET
+  last_contact = EXCLUDED.last_contact,
+  email = COALESCE(EXCLUDED.email, networking_contacts.email)
+RETURNING id
+```
+
+Add any new contacts found to the digest under "New Contacts Saved".
+
 ---
 
 ## Step 6 — Write scan_archive + send Gmail draft digest
