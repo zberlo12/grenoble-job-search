@@ -243,6 +243,28 @@ After each successful INSERT:
 UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
 ```
 
+### 4g — Capture company to target list (silent)
+
+After each successful INSERT that is NOT Dismissed, silently capture the company into `target_companies`.
+
+**Skip if company matches any of:** `'Not disclosed'`, `'DAF-ACTIVE'`, blank, or a string that contains `Agence`, `Cabinet de recrutement`, `Recruteur indépendant`, `RH Partenaires`, or `Bras Droit` (known agency/freelance-network placeholders that are not real employer targets).
+
+**Dedup check:**
+```sql
+SELECT id FROM target_companies WHERE company ILIKE $1 LIMIT 1
+```
+Pass `['%<company_name>%']`. If found → skip (already in target list).
+
+**If not found — INSERT:**
+```sql
+INSERT INTO target_companies (company, tier, location, notes)
+VALUES ($1, 'C', $2, $3)
+RETURNING id
+```
+Pass `[company_name, location_city_or_null, 'Auto-added from daily scan — ' + scan_date]`.
+
+This runs silently — no per-company output. Track a running count of new inserts to include in the digest.
+
 ---
 
 ## Step 5 — Application response check (runs once, after all dates)
@@ -381,6 +403,9 @@ Application Updates
 [If follow-up nudge rows:]
 Consider Following Up
   • [title] @ [company] — applied [N] days ago
+
+[If new companies captured > 0:]
+New companies → target list: [N]  (run /job-search-target-companies C to check careers pages)
 
 scan_archive: written ✅
 ```

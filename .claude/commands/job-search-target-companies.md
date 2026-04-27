@@ -1,6 +1,6 @@
 ---
 description: Checks Target Companies careers pages for open finance roles. Fetches Tier A and B companies from Supabase, visits each careers URL, looks for relevant listings, deduplicates against Job Applications, and writes new entries. Trigger with /job-search-target-companies.
-argument-hint: Optional. Pass "A" to check only Tier A, "B" for only Tier B. Default checks both.
+argument-hint: Optional. Pass "A" for Tier A only, "B" for Tier B only, "C" for Tier C (auto-captured from daily scan), "all" for all tiers. Default checks Tier A and B.
 allowed-tools: mcp__claude_ai_Indeed__search_jobs, mcp__claude_ai_Indeed__get_job_details, WebFetch, Bash
 ---
 
@@ -63,7 +63,9 @@ UNION queries: run two separate GETs and treat as found if either returns result
 Parse `$ARGUMENTS`:
 - `"A"` → only Tier A
 - `"B"` → only Tier B
-- blank → both Tier A and B
+- `"C"` → only Tier C (companies auto-captured from the daily scan — not yet manually reviewed)
+- `"all"` → all tiers (A, B, and C)
+- blank → Tier A and B only (default — omits Tier C to avoid sweeping every auto-captured company)
 
 ```sql
 SELECT id, company, tier, sector, location, careers_url, last_checked
@@ -71,7 +73,7 @@ FROM target_companies
 WHERE tier = ANY($1)
 ORDER BY tier ASC, last_checked ASC NULLS FIRST
 ```
-Pass `[['A','B']]` (or `[['A']]` / `[['B']]` for filtered runs).
+Pass `[['A','B']]` (default) · `[['A']]` · `[['B']]` · `[['C']]` · `[['A','B','C']]` (for `"all"`).
 
 ---
 
@@ -170,7 +172,7 @@ UPDATE target_companies SET last_checked = CURRENT_DATE WHERE id = $1
 
 ```
 Target Companies Sweep — [date]
-Companies checked: [N] Tier A, [N] Tier B
+Companies checked: [N] Tier A, [N] Tier B[, [N] Tier C if applicable]
 Finance roles found: [N total]  ·  Already in Supabase: [N]  ·  Written: [N]
 
 By Priority:
