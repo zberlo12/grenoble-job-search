@@ -72,7 +72,7 @@ SELECT scan_date FROM scan_archive ORDER BY scan_date DESC LIMIT 1
 - If gap between most-recent scan_date and yesterday > 1 day → expand scan range from (most-recent + 1 day) through yesterday. Add "⚠️ Catch-up scan ([N] days missed)" to each date's digest.
 - If no rows in scan_archive → scan yesterday only (first run).
 
-**Run Steps 2–4 once per date**, in chronological order. Step 5 (response check) runs once after all dates complete.
+**Run Steps 2–4 and Step 6a once per date**, in chronological order. Step 5 (response check) and Step 6b (Gmail digest) run once after all dates complete.
 
 ---
 
@@ -294,6 +294,8 @@ Log in digest only — do not alert.
 ## Step 6 — Write scan_archive + send Gmail draft digest
 
 ### 6a — scan_archive
+
+**Runs once per scan_date (inside the per-date loop).** Write one row per date — do not batch all dates into a single write.
 
 ```sql
 INSERT INTO scan_archive

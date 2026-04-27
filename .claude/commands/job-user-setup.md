@@ -290,9 +290,15 @@ If the user skips this phase: note "Tone profile not set — neutral register wi
 
 Using all values collected during Phases 3–6c, plus the Notion page IDs from Phase 2, write `config.json` to the project root via Bash.
 
-Ask first for:
-- **Supabase connection string** — from the user's Supabase project (Settings → Database → Connection string → URI). Format: `postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres`
-- **pg module path** — run `node -e "require.resolve('@modelcontextprotocol/server-postgres/node_modules/pg')"` via Bash to find it. If found, use that path. If not: ask the user to run `npm install -g @modelcontextprotocol/server-postgres` first, then retry.
+Ask in order:
+
+1. **Supabase project URL** — from the user's Supabase project: Settings → API → Project URL. Format: `https://[project-ref].supabase.co`. Write to config.json as `supabase_url`.
+
+2. **Supabase connection string** — Settings → Database → Connection string → URI (Transaction pooler). Format: `postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres`. Write to config.json as `supabase_connection_string`. Used by local sessions only.
+
+3. **Supabase service role key** — Settings → API → Project API keys → "service_role". This key is **not written to config.json** — it stays in memory only and is embedded directly into the remote trigger config in Phase 9. Store as `SUPABASE_SERVICE_KEY` for use in Phase 9.
+
+4. **pg module path** — run `node -e "require.resolve('@modelcontextprotocol/server-postgres/node_modules/pg')"` via Bash to find it. If found, use that path. If not: ask the user to run `npm install -g @modelcontextprotocol/server-postgres` first, then retry. Used by local sessions only.
 
 Then write config.json:
 
@@ -300,6 +306,7 @@ Then write config.json:
 node -e "
 const fs=require('fs');
 const cfg={
+  supabase_url:'<project_url>',
   supabase_connection_string:'<connection_string>',
   pg_module_path:'<pg_module_path>',
   user:{
@@ -414,33 +421,68 @@ Say:
 
 ## Phase 9 — Schedule the daily scan
 
-Say: "I'll set up your automatic daily scan now — this runs every morning and adds new job listings to Supabase."
+Say: "I'll set up your two automatic triggers now — the pre-processor (reads Gmail each night) and the daily scan (analyses and routes listings). Both use Supabase REST API so they work in the remote environment."
+
+The SUPABASE_SERVICE_KEY captured in Phase 7 is used here. The `supabase_url` is from config.json.
+
+**Trigger 1 — Email pre-processor (runs at 23:30 each night)**
 
 Call `RemoteTrigger` with `action: create`:
-- `name`: "[First Name]'s Daily Job Scan"
-- `cron_expression`: "1 0 * * *"
-- Message content:
+- `name`: "[First Name]'s Email Pre-Processor"
+- `cron_expression`: "30 23 * * *"
+- Message content (embed actual SUPABASE_URL and SUPABASE_KEY values):
   ```
-  You are running the daily job alert Gmail scan.
+  You are running the nightly email pre-processor for the job search system.
 
-  Step 1: Run `date +%Y-%m-%d` via Bash to get today's date. This is your `currentDate`.
-  Step 2: Run `cat config.json` via Bash to load the user config.
-  Step 3: Read the full skill instructions: .claude/commands/job-search-daily-scan.md
-  Step 4: Execute the scan with no date arguments — use the date from Step 1 as `currentDate`.
+  DB credentials (use REST API — TCP ports are blocked in this environment):
+  SUPABASE_URL=<supabase_url_from_config>
+  SUPABASE_KEY=<SUPABASE_SERVICE_KEY>
+
+  Step 1: Run `date +%Y-%m-%d` via Bash — this is your currentDate.
+  Step 2: Read .claude/commands/job-email-inbox.md
+  Step 3: Execute the skill for currentDate using REST API mode (curl, not pg).
 
   MCP tools available:
   - Gmail: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread
-  - Indeed: mcp__claude_ai_Indeed__get_job_details
-  - Notion: mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page
 
-  All instructions are in .claude/commands/job-search-daily-scan.md — follow them exactly.
+  All instructions are in .claude/commands/job-email-inbox.md — follow them exactly.
   ```
-- MCP connections: Gmail + Notion + Indeed
+- MCP connections: Gmail
 - `session_context.allowed_tools`: ["Bash", "Read"]
 - `session_context.model`: "claude-sonnet-4-6"
 - `session_context.sources`: [{"git_repository": {"url": "https://github.com/zberlo12/grenoble-job-search"}}]
 
-Confirm: "Daily scan scheduled. It will run every morning automatically."
+**Trigger 2 — Daily scan (runs at 00:01 each morning)**
+
+Call `RemoteTrigger` with `action: create`:
+- `name`: "[First Name]'s Daily Job Scan"
+- `cron_expression`: "1 0 * * *"
+- Message content (embed actual SUPABASE_URL and SUPABASE_KEY values):
+  ```
+  You are running the daily job alert scan.
+
+  DB credentials (use REST API — TCP ports are blocked in this environment):
+  SUPABASE_URL=<supabase_url_from_config>
+  SUPABASE_KEY=<SUPABASE_SERVICE_KEY>
+
+  Step 1: Run `date +%Y-%m-%d` via Bash — this is your currentDate.
+  Step 2: Read .claude/commands/job-search-daily-scan.md
+  Step 3: Execute the scan with no date arguments, using REST API mode (curl, not pg).
+    - Write one scan_archive row per date processed (Step 6a runs inside the per-date loop).
+    - Send one combined Gmail draft digest after all dates complete (Step 6b runs once at the end).
+
+  MCP tools available:
+  - Gmail: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Gmail__create_draft
+  - Indeed: mcp__claude_ai_Indeed__get_job_details
+
+  All instructions are in .claude/commands/job-search-daily-scan.md — follow them exactly.
+  ```
+- MCP connections: Gmail + Indeed
+- `session_context.allowed_tools`: ["Bash", "Read"]
+- `session_context.model`: "claude-sonnet-4-6"
+- `session_context.sources`: [{"git_repository": {"url": "https://github.com/zberlo12/grenoble-job-search"}}]
+
+Confirm: "Two triggers scheduled: pre-processor at 23:30, daily scan at 00:01. They will run automatically every night."
 
 ---
 
@@ -541,7 +583,7 @@ Output a final plain-language summary:
 ```bash
 cat config.json 2>/dev/null | node -e "
 const c=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-const required=['supabase_connection_string','pg_module_path','user','location_zones','job_titles','notion'];
+const required=['supabase_url','supabase_connection_string','pg_module_path','user','location_zones','job_titles','notion'];
 const missing=required.filter(k=>!c[k]);
 console.log(missing.length===0?'OK':'MISSING: '+missing.join(', '));
 "
