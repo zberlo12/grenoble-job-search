@@ -8,12 +8,10 @@ allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_t
 
 ## Step 0 — Load Config
 
-Run `cat config.json` via Bash. Extract:
-- `supabase_connection_string` → PG_CONN
-- `pg_module_path` → PG_MODULE
-- `gmail.label` → GMAIL_LABEL (default: `jobs`)
+**Choose DB mode based on what credentials are available:**
 
-**DB query pattern** — substitute actual values in every Bash call:
+**pg mode (local sessions):** Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL.
+
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
 const {Client}=require(process.env.PG_MODULE);
@@ -24,6 +22,28 @@ c.connect()
   .catch(e=>{console.error(e.message);process.exit(1);});
 "
 ```
+
+**REST API mode (remote triggers):** When `SUPABASE_URL` and `SUPABASE_KEY` are provided via trigger config instead (TCP ports 5432/6543 are blocked in remote environments), skip `cat config.json` and use `curl` for all DB calls:
+
+```bash
+# SELECT
+curl -s "SUPABASE_URL/rest/v1/<table>?<filters>&select=<cols>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY"
+
+# INSERT (returns inserted row)
+curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d '<JSON>'
+
+# UPDATE
+curl -s -X PATCH "SUPABASE_URL/rest/v1/<table>?id=eq.<id>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '<JSON>'
+```
+
+Filter operators: `col=eq.val` · `col=ilike.*val*` · `col=gte.val` · `col=lt.val` · `col=in.(a,b)` — multiple filters ANDed with `&`. GMAIL_LABEL comes from trigger config (default: `jobs`).
 
 ---
 

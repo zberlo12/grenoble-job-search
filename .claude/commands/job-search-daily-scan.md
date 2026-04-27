@@ -8,14 +8,10 @@ allowed-tools: mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__sea
 
 ## Step 0 — Load Config
 
-Run `cat config.json` via Bash. Extract:
-- `supabase_connection_string` → PG_CONN
-- `pg_module_path` → PG_MODULE
-- `user.salary_floor_apply` → salary_floor (default €55K)
-- `user.salary_floor_reject` → hard_reject (default €45K)
-- `location_zones` → green/yellow/orange/red city lists
+**Choose DB mode based on what credentials are available:**
 
-**DB query pattern** — substitute actual values in every Bash call:
+**pg mode (local sessions):** Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, plus salary floors and location zones.
+
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
 const {Client}=require(process.env.PG_MODULE);
@@ -26,6 +22,37 @@ c.connect()
   .catch(e=>{console.error(e.message);process.exit(1);});
 "
 ```
+
+**REST API mode (remote triggers):** When `SUPABASE_URL` and `SUPABASE_KEY` are provided via trigger config instead (TCP ports 5432/6543 are blocked in remote environments), skip `cat config.json` and use `curl` for all DB calls:
+
+```bash
+# SELECT
+curl -s "SUPABASE_URL/rest/v1/<table>?<filters>&select=<cols>&order=<col>.<dir>&limit=<n>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY"
+
+# INSERT (returns inserted row)
+curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d '<JSON>'
+
+# UPDATE
+curl -s -X PATCH "SUPABASE_URL/rest/v1/<table>?<filter>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '<JSON>'
+
+# UPSERT (ON CONFLICT DO UPDATE)
+curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: resolution=merge-duplicates,return=representation" \
+  -d '<JSON>'
+```
+
+Filter operators: `col=eq.val` · `col=ilike.*val*` · `col=gte.val` · `col=lt.val` · `col=in.(a,b)` · `col=not.in.(a,b)` — multiple filters ANDed with `&`.
+UNION dedup: run two separate GETs (job_applications + review_queue) and treat as found if either returns results.
+Auto-expiry notes append: GET matching rows first, then PATCH each with concatenated notes value.
 
 ---
 
