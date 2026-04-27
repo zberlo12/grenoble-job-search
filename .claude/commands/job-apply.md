@@ -66,7 +66,7 @@ Parse `$ARGUMENTS`:
 **Blank** → Fetch all rows with `Status = 'To Apply'` from job_applications:
 ```sql
 SELECT id, job_title, company, location, priority, salary, job_url,
-       notes, red_flags, docs_url, cv_approach
+       gmail_thread_url, notes, red_flags, docs_url, cv_approach
 FROM job_applications
 WHERE status = 'To Apply'
 ORDER BY date_added ASC
@@ -78,8 +78,10 @@ Present a numbered comparison table:
 
 | # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line decision note] | [link](url) or — |
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line decision note] | [link](url) or [Gmail](gmail_thread_url) — never blank |
 ```
+
+**Link column rule:** Always show a link. Prefer `job_url` as `[link](url)`. If `job_url` is null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
 
 Ask: > "Which numbers do you want to draft documents for? List them (e.g. `1,3`) or type `all`."
 

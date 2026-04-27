@@ -65,7 +65,7 @@ You are helping the user make final apply decisions on the week's "Potentially A
 
 ```sql
 SELECT id, job_title, company, location, priority, status, date_added,
-       job_url, notes, salary, red_flags
+       job_url, gmail_thread_url, notes, salary, red_flags
 FROM job_applications
 WHERE status = 'Potentially Apply'
 ORDER BY
@@ -86,12 +86,12 @@ Output a numbered comparison table:
 
 | # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line summary] | [link](url) or — |
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line summary] | [link](url) or [Gmail](gmail_thread_url) |
 ...
 ```
 
 Keep the Notes column to one short line — the decision-relevant point only.
-The 🔗 column should contain the Job URL as a markdown link `[link](url)`, or `—` if none stored.
+**Link column rule:** Always show a link. Prefer `job_url` as `[link](url)`. If `job_url` is null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
 `red_flags` is a JSONB array — display as comma-separated values.
 
 ---

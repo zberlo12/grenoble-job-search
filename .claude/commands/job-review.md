@@ -173,10 +173,12 @@ After Group A is fully processed, present all Group B (To Assess) rows as a conf
 ```
 ## To Assess — [N] listings to confirm
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note |
-|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | [1-line scan note] |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note | 🔗 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | [1-line scan note] | [link](url) or [Gmail](gmail_thread_url) |
 ```
+
+**Link column rule:** Always show a link. Prefer `job_url` as `[link](url)`. If `job_url` is null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
 
 For each row offer three options:
 - **[K] Keep** — accept scan's priority → promotes to `Potentially Apply` (B) or `To Apply` (A) in job_applications
