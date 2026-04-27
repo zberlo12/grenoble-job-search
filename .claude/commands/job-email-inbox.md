@@ -1,6 +1,6 @@
 ---
-description: Email pre-processor — reads today's job alert emails from Gmail, parses every listing, writes raw rows to listing_inbox staging table. No scoring, no routing. Run each evening before the daily scan, or manually to backfill. Trigger with /job-email-inbox.
-argument-hint: Optional date override in MM/DD/YY format (e.g. 04/23/26). Default: today.
+description: Email pre-processor — reads yesterday's job alert emails from Gmail, parses every listing, writes raw rows to listing_inbox staging table. No scoring, no routing. Runs nightly at 3 AM (scans the previous day). Trigger with /job-email-inbox.
+argument-hint: Optional date override in MM/DD/YY format (e.g. 04/23/26). Default: yesterday.
 allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, Bash
 ---
 
@@ -53,7 +53,9 @@ If `$ARGUMENTS` contains a date in `MM/DD/YY` format (e.g. `04/23/26`) → parse
 - month = first two digits, day = middle two digits, year = `20` + last two digits
 - convert to `parse_date` in `YYYY-MM-DD` format
 
-Otherwise → use today's date from the `currentDate` context variable.
+Otherwise → use **yesterday's** date (currentDate minus 1 day). This skill runs at 3 AM — the emails it scans arrived the previous calendar day.
+
+To compute yesterday: subtract 1 day from the `currentDate` context variable.
 
 Format `parse_date` as:
 - `YYYY-MM-DD` for SQL
