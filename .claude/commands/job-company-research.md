@@ -26,6 +26,36 @@ c.connect()
 "
 ```
 
+**REST API mode (remote triggers):** When `SUPABASE_URL` and `SUPABASE_KEY` are provided via trigger config instead (TCP ports 5432/6543 are blocked in remote environments), skip `cat config.json` and use `curl` for all DB calls:
+
+```bash
+# SELECT
+curl -s "SUPABASE_URL/rest/v1/<table>?<filters>&select=<cols>&order=<col>.<dir>&limit=<n>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY"
+
+# INSERT (returns inserted row)
+curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d '<JSON>'
+
+# UPDATE
+curl -s -X PATCH "SUPABASE_URL/rest/v1/<table>?<filter>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '<JSON>'
+
+# UPSERT (ON CONFLICT DO UPDATE)
+curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
+  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: resolution=merge-duplicates,return=representation" \
+  -d '<JSON>'
+```
+
+Filter operators: `col=eq.val` · `col=ilike.*val*` · `col=gte.val` · `col=lt.val` · `col=in.(a,b)` · `col=not.in.(a,b)` — multiple filters ANDed with `&`.
+UNION queries: run two separate GETs and treat as found if either returns results.
+
 ---
 
 ## Step 1 — Identify the company
