@@ -90,7 +90,7 @@ c.connect()
   .then(r => {{ console.log(JSON.stringify(r.rows)); return c.end(); }})
   .catch(e => {{ console.error(e.message); process.exit(1); }});
 """
-    result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+    result = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8")
     if result.returncode != 0:
         print(f"ERROR querying DB: {result.stderr.strip()}")
         sys.exit(1)
@@ -150,25 +150,34 @@ def parse_headline_and_summary(cv_lines):
     """
     Parse the CV headline and profile summary from the CV section lines.
 
-    Expected structure (as drafted by /job-apply):
-      Line 0: CV headline (short — the tailored job title variant)
-      Later:  Profile summary (the longest paragraph-style line)
+    Expected structure:
+      First line with '|': CV headline (tailored job title variant)
+      First line >100 chars: profile summary
+    The candidate name line (all-caps, no '|') is skipped.
     """
     if not cv_lines:
         return None, None
 
-    headline = cv_lines[0]
+    # Headline: first line containing '|' (e.g. "Contrôleur de Gestion | Finance Opérationnelle")
+    # Skips the candidate name which is typically line 0 (all caps, no '|')
+    headline = next((l for l in cv_lines if "|" in l), cv_lines[0])
 
     # Profile summary: first line over 100 chars that isn't a section header or bullet
     summary = None
-    for line in cv_lines[1:]:
+    for line in cv_lines:
+        if line == headline:
+            continue
         if len(line) > 100 and not line.startswith("##") and not line.startswith("-"):
             summary = line
             break
 
-    # Fallback: second line if no long paragraph found
-    if not summary and len(cv_lines) > 1:
-        summary = cv_lines[1]
+    # Fallback: line after headline
+    if not summary:
+        headline_idx = cv_lines.index(headline) if headline in cv_lines else 0
+        for line in cv_lines[headline_idx + 1:]:
+            if not line.startswith("-") and not line.startswith("##"):
+                summary = line
+                break
 
     return headline, summary
 

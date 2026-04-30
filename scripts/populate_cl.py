@@ -89,7 +89,7 @@ c.connect()
   .then(r => {{ console.log(JSON.stringify(r.rows)); return c.end(); }})
   .catch(e => {{ console.error(e.message); process.exit(1); }});
 """
-    result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+    result = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8")
     if result.returncode != 0:
         print(f"ERROR querying DB: {result.stderr.strip()}")
         sys.exit(1)
@@ -261,9 +261,9 @@ def main():
         # Parse CL paragraphs from plain text (blank-line separated)
         cl_paras = [p.strip() for p in re.split(r"\n\s*\n", cl_text) if p.strip() and len(p.strip()) > 30]
 
-        # CV headline from first non-empty line of cv_text
+        # CV headline: first line with '|' (skips candidate name line)
         cv_lines = [l.strip() for l in cv_text.splitlines() if l.strip()]
-        cl_headline = cv_lines[0] if cv_lines else job_title
+        cl_headline = next((l for l in cv_lines if "|" in l), cv_lines[0] if cv_lines else job_title)
 
         # Location: use raw location from DB; add ", France" if needed
         location = raw_location.strip()
@@ -302,7 +302,7 @@ def main():
             location = location.rstrip(", ") + ", France"
 
         cv_lines = extract_section(blocks, "Tailored CV")
-        cl_headline = cv_lines[0] if cv_lines else job_title
+        cl_headline = next((l for l in cv_lines if "|" in l), cv_lines[0] if cv_lines else job_title)
 
         cl_paras = [l for l in cl_lines if len(l) > 30]
 
