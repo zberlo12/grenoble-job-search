@@ -234,6 +234,31 @@ Apply `cl_rules` and `tone_profile` from Step 2A in full. Key rules:
 
 ---
 
+## Step 5b — Display Drafts (before Notion creation)
+
+After drafting CV + CL for **all** roles in the batch, output them in sequence in this format — one block per role. This is the copy-to-AI / self-edit review block. Do NOT wait for approval; proceed immediately to Step 6 after displaying.
+
+```
+---
+## Role [N] — [Job Title] @ [Company]
+[Location] · [Salary] · Priority [A/B] · [Zone] · [CV Approach]
+[Job URL or "Not available"]
+
+### Job Description
+[full job_description text from DB]
+
+### Tailored CV
+[full tailored CV text]
+
+### Cover Letter
+[CL body paragraphs only — no salutation, no sign-off]
+---
+```
+
+Repeat for each role. If only one role in the batch, one block.
+
+---
+
 ## Step 6 — Create Application Document Page in Notion
 
 Call `notion-create-pages` under Application Documents parent (`notion.application_docs_id`):
@@ -338,23 +363,17 @@ If either script fails, report the error and stop.
 
 ---
 
-## Step 9 — Output Summary
+## Step 9 — Final Summary
+
+After all roles in the batch are complete, output one summary block:
 
 ```
-Documents drafted for [Job Title] @ [Company]:
+## /job-apply complete — [N] role(s) drafted
 
-📄 Notion page: [Application Documents URL]
-   └── Tailored CV / Cover Letter / Application Notes
+| Role | Company | Notion | CV | CL |
+|---|---|---|---|---|
+| [Job Title] | [Company] | [link](url) | outputs/[CV file] | outputs/[CL file] |
+...
 
-📝 Word files:
-   └── Local: outputs/[CV filename]
-   └── Local: outputs/[CL filename]
-
-🔗 Job posting: [Job URL — for ChatGPT writing review against JD]
-
-Next steps:
-1. Open the Word files — review CV headline and LM opener first.
-2. Paste the JD link above into ChatGPT to cross-check writing against requirements.
-3. Review the Application Notes for anything to verify before submitting.
-4. When submitted, run /job-status to mark as Applied.
+Next: open Word files → review CV headline and CL opener → paste JD + CL into ChatGPT to cross-check. When submitted, run /job-status to mark as Applied.
 ```
