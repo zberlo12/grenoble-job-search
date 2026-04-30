@@ -234,9 +234,12 @@ Apply `cl_rules` and `tone_profile` from Step 2A in full. Key rules:
 
 ---
 
-## Step 5b — Display Drafts (before Notion creation)
+## Step 5b — Display Drafts for User Review (CL editing pass)
 
-After drafting CV + CL for **all** roles in the batch, output them in sequence in this format — one block per role. This is the copy-to-AI / self-edit review block. Do NOT wait for approval; proceed immediately to Step 6 after displaying.
+After drafting CV + CL for **all** roles in the batch, output them in sequence for user review.
+**Do NOT proceed to Step 6 until the user returns edited CLs.**
+
+Format — one block per role, JD + CL only (CV is drafted and ready but not shown here):
 
 ```
 ---
@@ -247,15 +250,20 @@ After drafting CV + CL for **all** roles in the batch, output them in sequence i
 ### Job Description
 [full job_description text from DB]
 
-### Tailored CV
-[full tailored CV text]
-
 ### Cover Letter
 [CL body paragraphs only — no salutation, no sign-off]
 ---
 ```
 
-Repeat for each role. If only one role in the batch, one block.
+Then say:
+> "Edit each CL and paste back the final version(s) with any feedback on what you changed and why.
+> I'll save the feedback to your writing profile, then create the Notion pages and Word files."
+
+**When the user returns edited CLs:**
+1. Compare the user's version against the draft — note what changed.
+2. Save any feedback as `role_specific_answers` (company-specific) or `candidate_talking_points` (general writing rules) via Bash.
+3. Replace the drafted CL with the user's final version.
+4. Proceed to Step 6.
 
 ---
 
