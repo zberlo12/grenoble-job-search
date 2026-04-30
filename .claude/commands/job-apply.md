@@ -267,81 +267,53 @@ Then say:
 
 ---
 
-## Step 6 — Create Application Document Page in Notion
+## Step 6 — Save CV and CL to Supabase
 
-Call `notion-create-pages` under Application Documents parent (`notion.application_docs_id`):
-```
-Title: [Company] — [Job Title] — [YYYY-MM-DD]
-```
+Save `cv_text` and `cl_text` directly to the job row. No Notion page needed.
 
-Then call `notion-update-page` to write the full content.
+**cv_text format:**
+- Plain text, line-break separated
+- First line = CV headline (used as `{{CV_HEADLINE}}` in Word)
+- First line over 100 chars = profile summary (used as `{{PROFILE_SUMMARY}}`)
 
-**IMPORTANT: Always use these exact English heading names — the Word populate scripts look for them by name:**
-
-```markdown
-## Tailored CV
-
-[full tailored CV]
-
----
-
-## Cover Letter
-
-[opening paragraph]
-
-[body paragraph 1]
-
-[body paragraph 2]
-
-[closing paragraph]
-
-**CRITICAL — Cover Letter section rules (the Word script maps paragraphs sequentially):**
-- Include ONLY the body paragraphs — no name, no sub-headline, no contact info, no date,
-  no company address, no "Objet:" line, no "Madame/Monsieur", no "Cordialement/Zachary Berlo"
+**cl_text format:**
+- Body paragraphs only — no salutation, no sign-off, no "Madame/Monsieur", no "Cordialement"
+- Paragraphs separated by a blank line
 - 4 paragraphs standard: opening · body1 · body2 · closing
-- Each paragraph on its own line with a blank line between
-
----
-
-## Application Notes
-
-**Role:** [Job Title] @ [Company]
-**Location:** [City (Dept)]
-**Priority:** [A/B]  ·  **CV Approach:** [approach]  ·  **Zone:** [zone]
-**Job URL:** [url if available]
-
-**IMPORTANT — Role and Location must be on their own dedicated lines as shown above.**
-**The Word script reads these exact labels to build the company addressee and subject line.**
-
-### Key selling points for this application
-- [experience that maps to requirement 1]
-- [experience that maps to requirement 2]
-- [any differentiator]
-
-### Red flags to manage
-- [e.g. "Salary not confirmed — raise at offer stage, not before"]
-
-### Before submitting
-- [ ] Verify company address in CL header
-- [ ] [other checks — hybrid policy, hiring manager name, etc.]
-```
-
----
-
-## Step 7 — Update Supabase Row
 
 ```sql
 UPDATE job_applications
-SET status = 'Docs Ready',
-    docs_url = $1,
-    notes = COALESCE(notes,'') || $2
-WHERE id = $3
+SET cv_text = $1,
+    cl_text = $2,
+    status = 'Docs Ready',
+    notes = COALESCE(notes,'') || $3
+WHERE id = $4
 ```
-Pass `[notion_page_url, ' | Docs drafted ' || today_date, row_id]`.
+Pass `[cv_text, cl_text, ' | Docs drafted ' || today_date, row_id]`.
+
+**Application Notes** (key selling points, red flags, before-submitting checklist):
+Display inline in the conversation after documents are saved — no Notion page needed.
+
+```
+### Application Notes — [Job Title] @ [Company]
+**Location:** [City (Dept)] · **Priority:** [A/B] · **CV Approach:** [approach]
+**Job URL:** [url if available]
+
+**Key selling points**
+- [experience that maps to requirement 1]
+- [experience that maps to requirement 2]
+
+**Red flags to manage**
+- [e.g. "Salary not confirmed — raise at offer stage, not before"]
+
+**Before submitting**
+- [ ] Verify company address in CL header
+- [ ] [other checks]
+```
 
 ---
 
-## Step 8 — Run Word Populate Scripts
+## Step 7 — Run Word Populate Scripts
 
 Run both scripts via Bash from the repo root:
 
@@ -354,34 +326,27 @@ Run both scripts via Bash from the repo root:
 | Transformation Focus | EN | `hof-en` |
 
 ```bash
-py scripts/populate_cv.py [PAGE_ID] --approach [FLAG]
-py scripts/populate_cl.py [PAGE_ID]
+py scripts/populate_cv.py --db-id [JOB_ID] --approach [FLAG]
+py scripts/populate_cl.py --db-id [JOB_ID]
 ```
 
-Replace `[PAGE_ID]` with the Notion page ID from Step 6 and `[FLAG]` with the mapped approach.
+Replace `[JOB_ID]` with the row id from Step 1 and `[FLAG]` with the mapped approach.
 If either script fails, report the error and stop.
 
 ---
 
-## Step 8b — Upload to Google Drive (optional)
-
-1. Try `mcp__claude_ai_Google_Drive__list_recent_files`. If fails, skip silently.
-2. If Drive available: search for "Job Applications" folder, upload CV+CL .docx files.
-3. Update Supabase notes: `UPDATE job_applications SET notes=notes||' | Drive: [links]' WHERE id=$1`
-
----
-
-## Step 9 — Final Summary
+## Step 8 — Final Summary
 
 After all roles in the batch are complete, output one summary block:
 
 ```
 ## /job-apply complete — [N] role(s) drafted
 
-| Role | Company | Notion | CV | CL |
+| Role | Company | DB id | CV | CL |
 |---|---|---|---|---|
-| [Job Title] | [Company] | [link](url) | outputs/[CV file] | outputs/[CL file] |
+| [Job Title] | [Company] | [id] | outputs/[CV file] | outputs/[CL file] |
 ...
 
 Next: open Word files → review CV headline and CL opener → paste JD + CL into ChatGPT to cross-check. When submitted, run /job-status to mark as Applied.
+To view stored drafts later: query job_applications WHERE id = [id] and select cv_text / cl_text.
 ```
