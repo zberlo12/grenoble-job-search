@@ -290,10 +290,10 @@ Save answers via UPDATE france_travail_log SET notes = COALESCE(notes,'') || ' F
 
 ### Step 2c-ii — Generate report with French comments
 
-**Before rendering the report**, run two background queries for the period to populate the Positions Reviewed block:
+**Before rendering the report**, run three background queries for the period to populate the Positions Reviewed block:
 
 ```sql
--- 1. New alerts received this week (from email scans)
+-- 1. New alerts received (from email scans)
 SELECT COALESCE(SUM(total_found),0)::int AS total_found
 FROM scan_archive
 WHERE scan_date BETWEEN $1 AND $2
@@ -301,11 +301,11 @@ WHERE scan_date BETWEEN $1 AND $2
 
 ```sql
 -- 2. Review session totals from FT log (Revue d'offres entries)
--- These are the authoritative source — they record exactly what was reviewed, including any backlog.
+-- Authoritative source — records exactly what was triaged, including any backlog.
 SELECT
-  COALESCE(SUM((regexp_match(action, 'Revue de (\d+) offres'))[1]::int), 0) AS total_reviewed,
-  COALESCE(SUM((regexp_match(action, '(\d+) retenues?'))[1]::int), 0)       AS retained,
-  COALESCE(SUM((regexp_match(action, '(\d+) rejet'))[1]::int), 0)           AS rejected,
+  COALESCE(SUM((regexp_match(action, 'Revue de ([0-9]+) offres'))[1]::int), 0) AS total_reviewed,
+  COALESCE(SUM((regexp_match(action, '([0-9]+) retenu'))[1]::int), 0)         AS retained,
+  COALESCE(SUM((regexp_match(action, '([0-9]+) rejet'))[1]::int), 0)          AS rejected,
   COUNT(*)::int AS session_count
 FROM france_travail_log
 WHERE categorie = 'Administratif'
@@ -313,7 +313,23 @@ WHERE categorie = 'Administratif'
   AND (date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
 ```
 
-The FT log `Revue d'offres` entries are written by `/job-review` and `/job-search-daily-scan` at the time of each review session. They accurately reflect what was actually triaged that week, including any backlog from previous scans — which is more meaningful for France Travail than a raw email-date filter.
+```sql
+-- 3. Funnel outcome — what happened to the retained listings
+-- Applications submitted in the period
+SELECT COUNT(*)::int AS submitted_period
+FROM job_applications
+WHERE date_applied BETWEEN $1 AND $2
+
+-- Current pipeline snapshot (not date-filtered — these totals include all open rows)
+SELECT
+  COUNT(*) FILTER (WHERE status = 'Docs Ready')::int    AS docs_ready,
+  COUNT(*) FILTER (WHERE status = 'Potentially Apply')::int AS pot_apply
+FROM job_applications
+```
+
+**Important:** "retained" = moved out of review into pipeline (Potentially Apply or To Apply) at time of triage. It is NOT the same as final applications submitted. The three numbers (submitted this period / docs ready / potentially apply) are the current downstream state across all open pipeline rows — they are not a strict subset of this period's retained count, because sessions process backlog from multiple weeks. Present them as a pipeline snapshot, not a direct breakdown of this week's 18.
+
+The FT log `Revue d'offres` entries are written by `/job-review` at the time of each session.
 
 For each entry, generate a **commentaire FT** — a concise French phrase (≤200 characters) ready to paste into the France Travail portal comment field. Use the templates in the **France Travail portal fields** section below.
 
@@ -328,15 +344,18 @@ Statut :     [À déclarer / Déclaré / Tout sauf Exclu / Tout]
 
 OFFRES EXAMINÉES
 ─────────────────────────────────────
-Nouvelles alertes reçues :   X   (emails scannés cette semaine)
-Revues de listings :         X offres  (X sessions)
-  → Retenues (pipeline) :    X
-  → Écartées :               X
+Nouvelles alertes reçues :        X   (emails scannés)
+Listings scrutinisés en revue :   X   (X sessions cette semaine)
+  → Retenus pour analyse :        X   (→ Potentially Apply / To Apply)
+  → Écartés directement :         X
 ─────────────────────────────────────
-💬 Revue de X offres : X retenues en pipeline, X écartées.
+Suivi des retenus (pipeline actuel) :
+  Candidatures soumises :         X   (date_applied cette période)
+  Dossiers prêts à soumettre :    X   (Docs Ready)
+  En évaluation :                 X   (Potentially Apply)
+─────────────────────────────────────
+💬 Revue de X offres d'emploi du [start] au [end] : X retenues pour analyse approfondie, X écartées.
      (copy-paste for France Travail portal Présélection entry)
-
-Note: "Revues de listings" counts offers actually triaged this week (including any backlog from previous scans), sourced from the FT log review session entries.
 
 RÉSUMÉ PAR CATÉGORIE
 ─────────────────────
@@ -448,8 +467,9 @@ Généré le : [today's date]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OFFRES EXAMINÉES (Présélection)
-  Alertes reçues : X  |  Revues : X (X sessions)  |  Retenues : X  |  Écartées : X
-  ▶ Revue de X offres du [start] au [end] : X retenues en pipeline, X écartées.
+  Scrutinisées : X (X sessions)  |  Retenues pour analyse : X  |  Écartées : X
+  Suivi : X soumises · X dossiers prêts · X en évaluation (Potentially Apply)
+  ▶ Revue de X offres d'emploi du [start] au [end] : X retenues pour analyse approfondie, X écartées.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Total : X actions à saisir dans France Travail
