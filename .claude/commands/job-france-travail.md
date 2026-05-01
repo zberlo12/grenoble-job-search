@@ -285,6 +285,26 @@ Save answers via UPDATE france_travail_log SET notes = COALESCE(notes,'') || ' F
 
 ### Step 2c-ii — Generate report with French comments
 
+**Before rendering the report**, run two background queries for the period to populate the Positions Reviewed block:
+
+```sql
+-- Daily scan activity from scan_archive
+SELECT SUM(total_found)::int AS total_scanned,
+       SUM(potentially_apply + needs_info + to_assess)::int AS retained,
+       SUM(dismissed)::int AS dismissed_scan
+FROM scan_archive
+WHERE scan_date BETWEEN $1 AND $2
+```
+
+```sql
+-- Manual review activity from job_applications (review sessions + /job-review)
+SELECT COUNT(*)::int AS total_reviewed,
+       COUNT(*) FILTER (WHERE status = 'Dismissed')::int AS dismissed_review,
+       COUNT(*) FILTER (WHERE status != 'Dismissed')::int AS kept_review
+FROM job_applications
+WHERE date_added::date BETWEEN $1 AND $2
+```
+
 For each entry, generate a **commentaire FT** — a concise French phrase (≤200 characters) ready to paste into the France Travail portal comment field. Use the templates in the **France Travail portal fields** section below.
 
 Output format:
@@ -295,6 +315,18 @@ FRANCE TRAVAIL — Rapport [Mois Année / Période]
 Profondeur : [Obligatoire / Obligatoire + Impactant / Tout]
 Statut :     [À déclarer / Déclaré / Tout sauf Exclu / Tout]
 ═══════════════════════════════════════════════════
+
+OFFRES EXAMINÉES (recherche active)
+─────────────────────────────────────
+Offres trouvées via alertes :   X   (scans automatiques)
+  dont retenues pour analyse :  X
+  dont écartées d'emblée :      X
+Offres examinées en revue :     X   (/job-review sessions)
+  dont retenues :               X
+  dont écartées :               X
+─────────────────────────────────────
+💬 Revue de X offres d'emploi — X retenues, X écartées.
+     (copy-paste for France Travail portal Présélection entry)
 
 RÉSUMÉ PAR CATÉGORIE
 ─────────────────────
@@ -363,6 +395,19 @@ On confirmation:
 2. Leave D entries unchanged.
 3. Draft the email — do NOT mark R entries as `Déclaré` yet (Zack marks them after actually entering into France Travail).
 
+**Positions Reviewed log entry:** After the triage confirmation, if the Positions Reviewed block showed any scan or review activity, offer:
+> "Add a Présélection entry to the FT log for this week's review activity? [Y/N]"
+> 💬 Revue de [X] offres d'emploi sur la période du [start] au [end] — [Y] retenues, [Z] écartées.
+
+If Y, INSERT into france_travail_log:
+```sql
+INSERT INTO france_travail_log
+(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes)
+VALUES ($1, $2, 'Présélection', 'Optionnel', $3, 'En ligne', 'Auto-Revue', 'À déclarer', $4)
+RETURNING id
+```
+Pass `['Présélection — Revue d\'offres d\'emploi', period_end_date, 'Revue de [X] offres — [Y] retenues, [Z] écartées', commentaire_ft]`.
+
 ### Step 2c-iv — Create Gmail draft
 
 Create a Gmail draft to `zberlo12@gmail.com`:
@@ -390,6 +435,12 @@ Généré le : [today's date]
     ▶ Entretien téléphonique pour le poste de Finance Director chez Raydiall.
 
 [... all R entries ...]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OFFRES EXAMINÉES (Présélection)
+  Offres examinées : X  (X via alertes + X en revue)
+  Retenues : X  |  Écartées : X
+  ▶ Revue de X offres d'emploi du [start] au [end] — X retenues, X écartées.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Total : X actions à saisir dans France Travail
