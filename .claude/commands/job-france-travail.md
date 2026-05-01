@@ -17,6 +17,9 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
 - `user.email` → email
+- `user.timezone` → TZ (default `Europe/Paris` if absent)
+
+**Timezone rule:** All date filters on `france_travail_log.date` (a UTC timestamp column) must cast to local date before comparing: `(date AT TIME ZONE '<TZ>')::date`. This ensures an entry recorded at 23:00 local time (01:00 UTC next day) is attributed to the correct local date. Apply this pattern everywhere `france_travail_log.date` is filtered by date range. `scan_archive.scan_date` is a plain `date` column — no conversion needed.
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
 ```bash
@@ -134,7 +137,7 @@ For each row:
 SELECT id FROM france_travail_log
 WHERE entreprise ILIKE $1
   AND categorie = $2
-  AND date BETWEEN $3::date - INTERVAL '1 day' AND $3::date + INTERVAL '1 day'
+  AND (date AT TIME ZONE '<TZ>')::date BETWEEN $3::date - INTERVAL '1 day' AND $3::date + INTERVAL '1 day'
 ```
 
 If found → skip. Count skipped entries separately.
@@ -250,7 +253,7 @@ Build the SQL filter from these answers:
 SELECT id, action, date, categorie, priorite, entreprise, poste_sujet, mode,
        source, statut_declaration, notes, job_application_id
 FROM france_travail_log
-WHERE date BETWEEN $1 AND $2
+WHERE (date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
   AND priorite = ANY($3)           -- ['Obligatoire'] or ['Obligatoire','Impactant'] or all
   AND statut_declaration = ANY($4) -- ['À déclarer'] or ['Déclaré'] or ['À déclarer','Déclaré'] or all
 ORDER BY date ASC
@@ -261,7 +264,9 @@ For job URL on Candidature entries, join to job_applications:
 SELECT ft.*, ja.job_url
 FROM france_travail_log ft
 LEFT JOIN job_applications ja ON ft.job_application_id = ja.id
-WHERE [same filters]
+WHERE (ft.date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
+  AND ft.priorite = ANY($3)
+  AND ft.statut_declaration = ANY($4)
 ORDER BY ft.date ASC
 ```
 
@@ -305,7 +310,7 @@ SELECT
 FROM france_travail_log
 WHERE categorie = 'Administratif'
   AND action LIKE 'Revue de%'
-  AND date BETWEEN $1 AND $2
+  AND (date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
 ```
 
 The FT log `Revue d'offres` entries are written by `/job-review` and `/job-search-daily-scan` at the time of each review session. They accurately reflect what was actually triaged that week, including any backlog from previous scans — which is more meaningful for France Travail than a raw email-date filter.
