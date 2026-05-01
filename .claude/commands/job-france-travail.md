@@ -288,22 +288,27 @@ Save answers via UPDATE france_travail_log SET notes = COALESCE(notes,'') || ' F
 **Before rendering the report**, run two background queries for the period to populate the Positions Reviewed block:
 
 ```sql
--- Daily scan activity from scan_archive
-SELECT SUM(total_found)::int AS total_scanned,
-       SUM(potentially_apply + needs_info + to_assess)::int AS retained,
-       SUM(dismissed)::int AS dismissed_scan
+-- 1. New alerts received this week (from email scans)
+SELECT COALESCE(SUM(total_found),0)::int AS total_found
 FROM scan_archive
 WHERE scan_date BETWEEN $1 AND $2
 ```
 
 ```sql
--- Manual review activity from job_applications (review sessions + /job-review)
-SELECT COUNT(*)::int AS total_reviewed,
-       COUNT(*) FILTER (WHERE status = 'Dismissed')::int AS dismissed_review,
-       COUNT(*) FILTER (WHERE status != 'Dismissed')::int AS kept_review
-FROM job_applications
-WHERE date_added::date BETWEEN $1 AND $2
+-- 2. Review session totals from FT log (Revue d'offres entries)
+-- These are the authoritative source — they record exactly what was reviewed, including any backlog.
+SELECT
+  COALESCE(SUM((regexp_match(action, 'Revue de (\d+) offres'))[1]::int), 0) AS total_reviewed,
+  COALESCE(SUM((regexp_match(action, '(\d+) retenues?'))[1]::int), 0)       AS retained,
+  COALESCE(SUM((regexp_match(action, '(\d+) rejet'))[1]::int), 0)           AS rejected,
+  COUNT(*)::int AS session_count
+FROM france_travail_log
+WHERE categorie = 'Administratif'
+  AND action LIKE 'Revue de%'
+  AND date BETWEEN $1 AND $2
 ```
+
+The FT log `Revue d'offres` entries are written by `/job-review` and `/job-search-daily-scan` at the time of each review session. They accurately reflect what was actually triaged that week, including any backlog from previous scans — which is more meaningful for France Travail than a raw email-date filter.
 
 For each entry, generate a **commentaire FT** — a concise French phrase (≤200 characters) ready to paste into the France Travail portal comment field. Use the templates in the **France Travail portal fields** section below.
 
@@ -316,17 +321,17 @@ Profondeur : [Obligatoire / Obligatoire + Impactant / Tout]
 Statut :     [À déclarer / Déclaré / Tout sauf Exclu / Tout]
 ═══════════════════════════════════════════════════
 
-OFFRES EXAMINÉES (recherche active)
+OFFRES EXAMINÉES
 ─────────────────────────────────────
-Offres trouvées via alertes :   X   (scans automatiques)
-  dont retenues pour analyse :  X
-  dont écartées d'emblée :      X
-Offres examinées en revue :     X   (/job-review sessions)
-  dont retenues :               X
-  dont écartées :               X
+Nouvelles alertes reçues :   X   (emails scannés cette semaine)
+Revues de listings :         X offres  (X sessions)
+  → Retenues (pipeline) :    X
+  → Écartées :               X
 ─────────────────────────────────────
-💬 Revue de X offres d'emploi — X retenues, X écartées.
+💬 Revue de X offres : X retenues en pipeline, X écartées.
      (copy-paste for France Travail portal Présélection entry)
+
+Note: "Revues de listings" counts offers actually triaged this week (including any backlog from previous scans), sourced from the FT log review session entries.
 
 RÉSUMÉ PAR CATÉGORIE
 ─────────────────────
@@ -438,9 +443,8 @@ Généré le : [today's date]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OFFRES EXAMINÉES (Présélection)
-  Offres examinées : X  (X via alertes + X en revue)
-  Retenues : X  |  Écartées : X
-  ▶ Revue de X offres d'emploi du [start] au [end] — X retenues, X écartées.
+  Alertes reçues : X  |  Revues : X (X sessions)  |  Retenues : X  |  Écartées : X
+  ▶ Revue de X offres du [start] au [end] : X retenues en pipeline, X écartées.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Total : X actions à saisir dans France Travail
