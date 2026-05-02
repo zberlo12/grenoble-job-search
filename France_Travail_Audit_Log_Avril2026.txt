@@ -1,0 +1,92 @@
+════════════════════════════════════════════════════════════════════
+ZACHARY BERLO — JOURNAL DE RECHERCHE D'EMPLOI
+Export complet — France Travail / Audit Trail
+Généré le : 18 avril 2026
+Période couverte : février 2026 – 18 avril 2026
+════════════════════════════════════════════════════════════════════
+
+NOTE : Les premiers enregistrements disponibles datent de février 2026.
+Aucun historique antérieur n'est conservé dans le système de suivi.
+
+────────────────────────────────────────────────────────────────────
+SECTION 1 — CANDIDATURES
+────────────────────────────────────────────────────────────────────
+
+Entreprise                    | Poste                                          | Date candidature | Source       | Statut
+------------------------------|------------------------------------------------|------------------|--------------|-----------------------------
+Verkor                        | Commodity Buyer                                | 2026-02-01       | LinkedIn     | Refusé
+Santélys                      | Contrôleur de Gestion Sénior H/F               | 2026-01-15       | LinkedIn     | Refusé
+Duro Labs                     | Finance Manager (remote)                       | 2026-01-20       | Remote/WTW   | Refusé
+Brevo                         | Senior FP&A Analyst (remote)                   | 2026-01-25       | Remote       | Refusé
+TGG                           | Accounting Manager (remote US)                 | 2026-01-28       | Remote       | Refusé
+Airalo                        | Principal Finance Business Partner (remote)    | 2026-02-10       | Remote       | Refusé
+Canonical                     | Revenue Accountant (remote)                    | 2026-02-12       | Remote       | Refusé
+Orange Cyberdefense           | Contrôleur de Gestion SG&A                     | 2026-02-15       | LinkedIn     | Refusé
+Avient                        | Accounting Manager — Tossiat (01)              | 2026-02-20       | LinkedIn     | Refusé
+GE Vernova Hydro              | Expert Productivité Coûts                      | 2026-02-22       | LinkedIn     | Refusé 14 mars
+FED Supply client             | Demand & Supply Planner — La Tour-en-Maurienne | 2026-02-25       | Recruteur     | En attente
+IC'Alps                       | Responsable Administratif et Financier         | 2026-03-06       | APEC         | Fermé — 35j sans réponse
+Neptune RH client             | Contrôleur de Gestion Industriel               | 2026-03-06       | APEC         | Fermé — 35j sans réponse
+Sames (Actual Talent)         | Credit Manager & Trésorerie                    | 2026-03-06       | Actual Talent | Refusé 27 mars
+EDEIS Concessions             | Responsable Administratif et Financier         | 2026-03-06       | Indeed/APEC  | En attente
+Hays Finance                  | Responsable Administratif et Financier         | 2026-03-14       | Hays         | En attente
+HAPIK                         | Comptable Mixte France/UK                      | 2026-03-15       | Indeed       | Fermé — sans réponse
+TAVENGINEERING                | Business Controller                            | 2026-03-17       | LinkedIn     | Fermé — 3 sem. sans réponse
+RAYDIALL                      | Responsable Administratif et Financier         | 2026-03-22       | Indeed       | 🎯 Entretien — retour en attente
+Hays CDG FP&A                 | Contrôleur de Gestion Commercial / FP&A        | 2026-03-22       | Indeed/Hays  | En attente
+Laboratoires Uriage           | Contrôleur de Gestion Industriel               | 2026-03-22       | LinkedIn     | En attente
+Teledyne e2v                  | Manufacturing & General Expenses Controller    | 2026-03-28       | LinkedIn     | En attente
+Carrier                       | Manager FP&A                                   | Non soumis       | LinkedIn     | 🔴 À soumettre
+Siemens Energy                | Finance Head — Subregion W.Europe & Africa     | 2026-04-10       | LinkedIn     | En attente
+ESRF — The European Synchrotron | Head of Finance Service                     | 2026-04-10       | LinkedIn     | En attente
+Thermo Fisher Scientific      | Finance Senior Manager                         | 2026-04-10       | LinkedIn     | En attente
+
+────────────────────────────────────────────────────────────────────
+SECTION 2 — ENTRETIENS
+────────────────────────────────────────────────────────────────────
+
+Entreprise              | Poste                              | Date         | Mode         | Résultat / Étape suivante
+------------------------|------------------------------------|--------------|--------------|-------------------------------
+Sames (Actual Talent)   | Credit Manager & Trésorerie        | 2026-03-16   | Téléphone    | Refusé 27 mars (profil CM insuffisant + niveau FR)
+Raydiall (via Alice FERRA) | Responsable Administratif et Financier | 2026-04-10 | Visio (15–20 min) | Pré-sélection OK — en attente retour
+
+────────────────────────────────────────────────────────────────────
+SECTION 3 — CONTACTS RECRUTEURS / RÉSEAU
+────────────────────────────────────────────────────────────────────
+
+Nom                        | Entreprise              | Date         | Contexte
+---------------------------|-------------------------|--------------|------------------------------------------
+Aymeric Le Thiec           | Verkor                  | 2026-02-01   | Recruteur — refus Commodity Buyer, reconnexion proposée pour rôles finance
+Anne-Sophie LEYMONIE       | Actual Talent (Lyon)    | 2026-03-14   | Consultante — entretien Sames Credit Manager. Profil conservé pour autres opportunités
+Carole Fabiano             | Hays Finance (Grenoble) | 2026-03-23   | Consultante — réponse à candidature RAF. CV transmis suite à demande
+Alice FERRA                | Radiall / Raydiall      | 2026-04-02   | Talent Acquisition BP RPO — prise de contact suite candidature. Appel visio 10 avril
+
+────────────────────────────────────────────────────────────────────
+SECTION 4 — AUTRES ACTIONS
+────────────────────────────────────────────────────────────────────
+
+Date          | Type              | Description
+--------------|-------------------|----------------------------------------------------------
+2026-02-21    | Admin             | Révision complète CV anglais et français + lettre de motivation générique
+2026-02-27    | Admin             | Inscription Agil'Cadres — programme France Travail cadres
+2026-02-27    | Admin             | Recherche entreprise Verkor — profil, secteur, contacts
+2026-03-01    | Admin             | Mise à jour CV — ajout progression Controller, optimisation mise en page
+2026-03-06    | Admin             | Création tableau de bord HTML de recherche d'emploi
+2026-03-06    | Admin             | Création fichier Excel audit trail (Company_Links.xlsx)
+2026-03-06    | Admin             | Cartographie des zones de trajet (vert/jaune/orange/rouge)
+2026-03-06    | Admin             | Construction tiers entreprises cibles (A/B/C/D + zone de staging)
+2026-03-06    | Admin             | Nettoyage alertes Gmail — désinscriptions et organisation label Jobs
+2026-03-06    | Admin             | Configuration alertes LinkedIn (5 groupes OR — RAF, CDG, Cash/Credit, EN, Supply Chain)
+2026-03-15    | Admin             | Configuration alertes Indeed, Cadremploi, APEC
+2026-03-16    | Entretien         | Appel téléphonique pré-sélection Sames / Actual Talent (Anne-Sophie Leymonie)
+2026-03-18    | Admin             | Email de suivi post-entretien envoyé à Anne-Sophie Leymonie (Sames)
+2026-03-22    | Admin             | Vérification tiers A (Schneider, ARaymond, STMicro, Soitec, Radiall, Becton, Verkor)
+2026-03-28    | Admin             | Vérification tiers B (HP, Caterpillar, GE Vernova, Staubli, Thales, Aptar, Ugitech)
+2026-04-10    | Entretien         | Appel visio pré-sélection Raydiall — Alice FERRA (Talent Acquisition BP)
+2026-04-10    | Admin             | Mise à jour tableau de bord — 3 nouvelles candidatures, statuts, contacts réseau
+2026-04-18    | Admin             | Export complet journal de recherche — préparation rendez-vous France Travail
+
+════════════════════════════════════════════════════════════════════
+FIN DU DOCUMENT
+Zachary Berlo | zberlo12@gmail.com | +33 7 66 16 06 01 | Grenoble
+════════════════════════════════════════════════════════════════════
