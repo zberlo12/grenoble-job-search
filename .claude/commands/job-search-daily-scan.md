@@ -1,7 +1,7 @@
 ---
 description: Daily job scan — reads from listing_inbox staging table (populated by /job-email-inbox), analyses all pending rows, routes results to Supabase, sends a Gmail draft digest. Runs automatically each morning at 00:01. Do not invoke manually unless testing.
 argument-hint: Optional MM/DD/YY for a single day, or MM/DD/YY+ to catch up from that date through yesterday. Default (no arg) scans yesterday.
-allowed-tools: mcp__claude_ai_Indeed__get_job_details, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Gmail__create_draft, Bash
+allowed-tools: mcp__claude_ai_Gmail__create_draft, Bash
 ---
 
 # Daily Job Scan
@@ -72,7 +72,7 @@ SELECT scan_date FROM scan_archive ORDER BY scan_date DESC LIMIT 1
 - If gap between most-recent scan_date and yesterday > 1 day → expand scan range from (most-recent + 1 day) through yesterday. Add "⚠️ Catch-up scan ([N] days missed)" to each date's digest.
 - If no rows in scan_archive → scan yesterday only (first run).
 
-**Run Steps 2–4 and Step 6a once per date**, in chronological order. Step 5 (response check) and Step 6b (Gmail digest) run once after all dates complete.
+**Run Steps 2–4 and Step 6a once per date**, in chronological order. Step 5 (Gmail digest) runs once after all dates complete.
 
 ---
 
@@ -134,32 +134,27 @@ UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
 
 ## Step 4 — Analyse pending rows
 
-Process each row from Query A one by one.
+### 4a — Dedup check (batch)
 
-### 4a — Dedup check
-
-Expand abbreviations before searching: RAF ↔ Responsable Administratif Financier, DAF ↔ Directeur Administratif Financier, CDG ↔ Contrôleur de Gestion, FBP ↔ Finance Business Partner.
+**Run once per scan_date before the row loop — load recent entries:**
 
 ```sql
-SELECT id FROM job_applications
-WHERE company ILIKE $1 AND job_title ILIKE $2
-  AND date_added >= CURRENT_DATE - INTERVAL '30 days'
-UNION
-SELECT id FROM review_queue
-WHERE company ILIKE $1 AND job_title ILIKE $2
-  AND date_added >= CURRENT_DATE - INTERVAL '30 days'
-LIMIT 1
+SELECT company, job_title, job_url
+FROM job_applications
+WHERE date_added >= CURRENT_DATE - INTERVAL '30 days'
+UNION ALL
+SELECT company, job_title, job_url
+FROM review_queue
+WHERE date_added >= CURRENT_DATE - INTERVAL '30 days'
 ```
-Pass `['%<company>%', '%<title_root>%']`. Match → duplicate, skip, mark listing_inbox row as processed.
 
-URL confirmation (when title is ambiguous):
-```sql
-SELECT id FROM job_applications WHERE job_url ILIKE $1
-UNION
-SELECT id FROM review_queue WHERE job_url ILIKE $1
-LIMIT 1
-```
-Match → duplicate, skip.
+Store as `recentEntries` in-memory. This single query replaces per-row UNION SELECTs.
+
+Expand abbreviations before matching: RAF ↔ Responsable Administratif Financier, DAF ↔ Directeur Administratif Financier, CDG ↔ Contrôleur de Gestion, FBP ↔ Finance Business Partner.
+
+**Per-row dedup:** Check each pending listing against `recentEntries` using case-insensitive partial matching on `company` + `job_title` root. If a match is found → duplicate, skip, mark listing_inbox row as processed.
+
+URL confirmation (ambiguous title match only): check `recentEntries` for matching `job_url`. Only run a targeted SQL query if the in-memory match is genuinely ambiguous (e.g., same company with multiple distinct open roles).
 
 ### 4b — Rescue gate (apply BEFORE standard ranking)
 
@@ -191,16 +186,7 @@ If ALL of the following are true:
 - **C**: Multiple mismatches or one disqualifying factor → `review_queue` `To Assess`
 - **Dismissed**: Definitive disqualifier (Paris on-site, explicitly entry-level with ≤3 years required, <€40K stated, truly unrelated role — IT development, medical, marketing, HR professional, legal, education) → `job_applications` `Dismissed`, populate `red_flags`, `notes='Auto-dismissed: [reason]'`. Operational/logistics/supply chain/PM roles are NEVER auto-dismissed — see rescue gate above.
 
-### 4d — Pre-write enrichment (Needs Info rows only)
-
-- **Rung 1 — Indeed API**: if `job_url` contains `jk=`, call `mcp__claude_ai_Indeed__get_job_details`. If successful → extract salary, contract type, hybrid/remote, seniority, scope, language. Re-rank if all gaps filled.
-- **Rung 2 — WebFetch**: if `job_url` exists and is not LinkedIn, fetch it. Extract structured fields only. Re-rank if gaps filled.
-- **Rung 3 — LinkedIn short-circuit**: if `job_url` is LinkedIn → skip enrichment, write as Needs Info unchanged.
-- **Rung 4 — No URL / all failed**: write as Needs Info unchanged.
-
-Context-hygiene: discard full JD text after extracting fields.
-
-### 4e — Write to Supabase
+### 4d — Write to Supabase
 
 | Outcome | Table | Status |
 |---|---|---|
@@ -236,117 +222,42 @@ Field notes:
 - `cv_approach` (job_applications only): `'FP&A Focus'` / `'Cost Control Focus'` / `'Standard'` / `'Transformation Focus'`
 - `job_description` = full JD text truncated to ~4000 chars; null if unobtainable
 
-### 4f — Mark processed
+### 4e — Mark processed
 
 After each successful INSERT:
 ```sql
 UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
 ```
 
-### 4g — Capture company to target list (silent)
+### 4f — Capture company to target list (batch, silent)
 
-After each successful INSERT that is NOT Dismissed, silently capture the company into `target_companies`.
+**Run once per scan_date before the row loop — load existing companies:**
+
+```sql
+SELECT company FROM target_companies
+```
+
+Store as `existingCompanies` (in-memory). Check new companies against this list rather than querying per row.
 
 **Skip if company matches any of:** `'Not disclosed'`, `'DAF-ACTIVE'`, blank, or a string that contains `Agence`, `Cabinet de recrutement`, `Recruteur indépendant`, `RH Partenaires`, or `Bras Droit` (known agency/freelance-network placeholders that are not real employer targets).
 
-**Dedup check:**
-```sql
-SELECT id FROM target_companies WHERE company ILIKE $1 LIMIT 1
-```
-Pass `['%<company_name>%']`. If found → skip (already in target list).
+**During Step 4:** After each non-Dismissed INSERT, add company to `newCompanies[]` if not in `existingCompanies` (case-insensitive partial match).
 
-**If not found — INSERT:**
+**After all rows processed — INSERT all new companies:**
+
 ```sql
 INSERT INTO target_companies (company, tier, location, notes)
 VALUES ($1, 'C', $2, $3)
 RETURNING id
 ```
-Pass `[company_name, location_city_or_null, 'Auto-added from daily scan — ' + scan_date]`.
 
-This runs silently — no per-company output. Track a running count of new inserts to include in the digest.
-
----
-
-## Step 5 — Application response check (runs once, after all dates)
-
-**Fetch active applications:**
-```sql
-SELECT id, company, job_title, date_applied, date_added, notes, gmail_thread_url
-FROM job_applications
-WHERE status IN ('Applied', 'Interview')
-```
-
-**For each, search Gmail:**
-```
-"[Company]" (entretien OR interview OR candidature OR retenu OR sélectionné OR refusé OR rejected OR suite OR félicitations OR offer) after:YYYY/MM/DD -label:jobs
-```
-Use `date_applied` (or `date_added` as fallback) for `after:`.
-
-**Classify response:**
-- Interview → entretien, interview, rendez-vous, call, visio
-- Offer → offre, proposition, félicitations, offer letter
-- Rejected → refusé, ne correspond pas, other candidates, poursuivons sans
-- Unknown → include in digest for manual review
-
-**Update Supabase on match:**
-```sql
-UPDATE job_applications
-SET status=$1, date_response=CURRENT_DATE,
-    notes=COALESCE(notes,'')||$2,
-    gmail_thread_url=COALESCE(NULLIF(gmail_thread_url,''),$3)
-WHERE id=$4
-```
-
-**Auto-expiry:**
-```sql
-UPDATE job_applications
-SET status='Dismissed',
-    notes=COALESCE(notes,'')||' | Auto-expired: no response after 60 days'
-WHERE status='Applied'
-  AND date_applied < CURRENT_DATE - INTERVAL '60 days'
-  AND COALESCE(notes,'') NOT LIKE '%Auto-expired%'
-RETURNING id, job_title, company
-```
-Log in digest only — do not alert.
-
-**Follow-up nudge:** for Applied rows 14–45 days old with no Gmail response found and no "follow-up sent"/"relance" in notes → add to digest under "Consider Following Up". Do NOT update status or notes.
-
-**Human contact detection:** For each response email found (Interview, Offer, Rejected, or Unknown), check whether the sender is a real person — not an automated address. Automated indicators: sender address contains `noreply`, `no-reply`, `donotreply`, `notifications`, `mailer`, `alert`, `automatique`, `auto`, `careers@`, `jobs@`, or the message has no human signature block.
-
-If the sender appears to be a named human (e.g. a recruiter, HR contact, or hiring manager):
-1. Extract: full name, role/title (from signature if present), company name, email address.
-2. Upsert into `networking_contacts`:
-
-```sql
-INSERT INTO networking_contacts
-  (name, company, role, email, last_contact, source, notes)
-VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5)
-ON CONFLICT (email) DO UPDATE SET
-  last_contact = EXCLUDED.last_contact,
-  notes = COALESCE(networking_contacts.notes, '') || ' | ' || EXCLUDED.notes
-RETURNING id
-```
-
-Pass `[name, company, role_or_null, email, 'Auto-detected from ' || application_status || ' response — ' || job_title || ' @ ' || company]`.
-
-If the table has no `email` unique constraint, fall back to name+company dedup:
-```sql
-INSERT INTO networking_contacts
-  (name, company, role, email, last_contact, source, notes)
-VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5)
-ON CONFLICT (name, company) DO UPDATE SET
-  last_contact = EXCLUDED.last_contact,
-  email = COALESCE(EXCLUDED.email, networking_contacts.email)
-RETURNING id
-```
-
-Add any new contacts found to the digest under "New Contacts Saved".
+Run one INSERT per new company. Track total inserted for the digest.
 
 ---
 
-## Step 6 — Write scan_archive + send Gmail draft digest
+## Step 5 — Write scan_archive + send Gmail draft digest
 
-### 6a — scan_archive
+### 5a — scan_archive
 
 **Runs once per scan_date (inside the per-date loop).** Write one row per date — do not batch all dates into a single write.
 
@@ -366,7 +277,7 @@ Pass `[scan_date, digest_text, total_new, priority_a_count, needs_info_count, to
 
 `total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows + manual_check rows routed in Step 3.
 
-### 6b — Gmail draft digest
+### 5b — Gmail draft digest
 
 Call `mcp__claude_ai_Gmail__create_draft` with:
 - `to`: `zberlo12@gmail.com`
@@ -395,14 +306,6 @@ Needs Info Queue (added today)
 [If Priority A rows:]
 Notable
   • [title] @ [company] — [one-line reason]
-
-[If response check found anything:]
-Application Updates
-  • [title] @ [company] — [new status]
-
-[If follow-up nudge rows:]
-Consider Following Up
-  • [title] @ [company] — applied [N] days ago
 
 [If new companies captured > 0:]
 New companies → target list: [N]  (run /job-search-target-companies C to check careers pages)

@@ -70,11 +70,16 @@ You are helping drain the Review Queue — a staging table holding listings the 
 ```sql
 SELECT id, job_title, company, source, location, salary, priority, status,
        date_added, job_url, gmail_thread_url, red_flags, missing_info,
-       alert_keyword, notes, english, job_description
+       alert_keyword, notes, english
 FROM review_queue
 ORDER BY
   CASE status WHEN 'Needs Info' THEN 1 ELSE 2 END,
   date_added ASC
+```
+
+`job_description` is intentionally excluded here — it can be 4K chars per row and is rarely needed for ranking decisions. Fetch it on-demand only when a user pastes a JD in the manual-paste loop (Step 6):
+```sql
+SELECT job_description FROM review_queue WHERE id = $1
 ```
 
 Split rows into:
@@ -91,10 +96,19 @@ If both groups are empty: "Review Queue is empty — nothing to review" and stop
 Loop through every Needs Info row. For each row, attempt auto-enrichment using the ladder below.
 **Do not pause or ask the user anything during this sweep.**
 
+**Pre-filter — skip enrichment immediately if ANY of:**
+- `notes` contains `UNREADABLE` — HTML-only email, no URL to enrich from
+- `notes` contains `OPERATIONAL ROLE` — enrichment won't change routing; needs human judgment
+- `job_url` is null, `'Not available'`, or a `linkedin.com` URL — all rungs will fail
+
+For rows matching any pre-filter condition: add directly to the manual-paste list with reason `UNREADABLE`, `OPERATIONAL`, or `LinkedIn — blocked`. Do not attempt any rung.
+
 **Context-hygiene rule:** If a fetched page exceeds ~8K characters, extract only the structured fields (salary, location, hybrid/remote, scope, language, contract type, seniority) and discard the rest.
 
+**Circuit breaker:** Track `indeed_failures` counter (starts at 0). After 2 consecutive Indeed API failures in this session, set `indeed_available = false` and skip Rung 1 for all remaining rows. Log once: "Indeed API unavailable — skipping for remaining rows."
+
 **Rung 1 — Indeed URL**
-If `job_url` contains `jk=`, extract the job ID and call `mcp__claude_ai_Indeed__get_job_details`.
+If `job_url` contains `jk=` AND `indeed_available` is true, extract the job ID and call `mcp__claude_ai_Indeed__get_job_details`. On failure, increment `indeed_failures`; on success, reset `indeed_failures` to 0.
 
 **Rung 2 — Gmail thread re-read**
 If `gmail_thread_url` is set, extract the thread ID (last segment after `#all/`) and call `mcp__claude_ai_Gmail__get_thread`. Only trust this rung if the thread body contains more than a one-line alert snippet.

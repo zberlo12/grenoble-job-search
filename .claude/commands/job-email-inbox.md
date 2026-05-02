@@ -135,7 +135,21 @@ If no `plaintextBody`:
 
 **All other threads (Indeed, LinkedIn, Direct):**
 
-Call `get_thread` to read the full body. Extract each distinct job listing from the email body. For each listing:
+**Snippet-first check (LinkedIn and Indeed only):** Before calling `get_thread`, inspect the Gmail snippet from the search result. If ALL of the following are true, parse directly from the snippet without calling `get_thread`:
+1. Source is LinkedIn or Indeed
+2. Snippet is ≥ 80 chars
+3. Subject line does NOT indicate multiple listings (no "X offres", "X jobs", "X nouvelles offres")
+4. A single job title + company name are clearly identifiable in the snippet
+
+Only call `get_thread` if:
+- Snippet is < 80 chars
+- Subject suggests multiple listings
+- Source is Direct (always needs full body)
+- Listing data in snippet is incomplete (title or company not visible)
+
+When parsing from snippet: use snippet text for `raw_snippet` and leave `job_description` as null. If a `jk=` job ID is visible in the snippet URL, extract it for `job_url`.
+
+Call `get_thread` to read the full body for all other cases. Extract each distinct job listing from the email body. For each listing:
 
 **Alert keyword** (extract once per thread from subject):
 1. French: `pour (.+?) (?:à|en|dans|sur)` → keyword = match group 1
@@ -177,7 +191,7 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12,$13)
 ```
 Pass `[parse_date, threadId, thread_url, source, alert_keyword, job_title, company, location, salary, job_url, contract_type, english, raw_snippet]`.
 
-`raw_snippet`: first 500 chars of the listing text from the email body.
+`raw_snippet`: first 200 chars of the listing text from the email body (or snippet if snippet-parsed).
 
 ---
 
