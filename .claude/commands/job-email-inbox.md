@@ -56,21 +56,46 @@ If row returned → skip thread (count as duplicate).
 
 ### 3b — Route by source
 
-**APEC** (`from:offres@diffusion.apec.fr`): Do not call `get_thread`. Insert one summary row from the search result snippet: `parse_status='manual_check'`, `parse_notes='APEC HTML-only — check apec.fr manually'`. `alert_keyword` from subject; `raw_snippet` from search snippet; `gmail_thread_url` = `https://mail.google.com/mail/u/0/#all/<threadId>`.
+**APEC** (`from:offres@diffusion.apec.fr`): Do not call `get_thread`. Insert one summary row:
+- `parse_status='manual_check'`
+- `parse_notes`: combine listing count from subject (e.g. "11 offres") + alert keyword + source note. Format: `'APEC: [N offres] — [alert_keyword] — HTML-only — check apec.fr manually'`. If count not in subject, omit it.
+- `alert_keyword` from subject; `raw_snippet` from search snippet; `raw_body` = subject + ' | ' + snippet (truncated to 500 chars)
+- `gmail_thread_url` = `https://mail.google.com/mail/u/0/#all/<threadId>`
 
-**Cadremploi** (`from:alertes.cadremploi.fr`): Call `get_thread`.
-- Has `plaintextBody` → parse as standard (see below)
-- No body, specific listing visible in snippet → INSERT `parse_status='pending'`, `parse_notes='Cadremploi snippet-parsed'`
-- No body, no specific listing → INSERT `parse_status='manual_check'`, `parse_notes='Cadremploi HTML-only — check manually'`
+**Cadremploi** (`from:alertes.cadremploi.fr`): Call `get_thread` with `messageFormat=FULL_CONTENT`.
 
-**All others (Indeed, LinkedIn, Direct):**
+> **Important — known MCP limitation:** `get_thread` does NOT return body content for HTML-only emails. `plaintextBody` will be absent for all Cadremploi alerts. Do not waste retries. The snippet is the only text available.
+
+- Has `plaintextBody` (non-empty) → use as body text → parse as standard (see below)
+- No `plaintextBody` → evaluate snippet only:
+  - Snippet contains a specific job title AND (company name OR location) AND does NOT end in `...` within the first 120 chars → INSERT `parse_status='pending'`, `parse_notes='Cadremploi snippet-parsed'`
+  - Otherwise → INSERT `parse_status='manual_check'`, `parse_notes='Cadremploi HTML-only — open Gmail link to review and paste JD'`
+- `raw_body` = subject + ' | ' + snippet (truncated to 500 chars)
+
+**All others (Indeed, LinkedIn, Direct/HelloWork):**
 
 **Snippet-first** (LinkedIn/Indeed only — skip `get_thread` if ALL true):
 1. Snippet ≥ 80 chars
 2. Subject does NOT suggest multiple listings ("X offres", "X jobs", "X nouvelles offres")
 3. Single title + company clearly visible in snippet
+4. Snippet does NOT end in `...` within the first 120 chars
 
-Otherwise call `get_thread`. Extract each distinct listing from the body.
+Otherwise call `get_thread` with `messageFormat=FULL_CONTENT`.
+
+**If `get_thread` returns no `plaintextBody` (HTML-only email — common for HelloWork direct alerts):**
+
+Attempt subject-line extraction before falling back to `manual_check`:
+
+Try these patterns on the subject in order:
+1. `[^,]+,\s*(.+?)\s+recrute\s+(?:un|une)\s+(.+?)(?:\s*[-–]\s*(?:CDI|CDD|Intérim|H/F|F/H).*)?$` → company=group(1), title=group(2)
+2. `(.+?)\s*[-–|:]\s*(.+?)(?:\s*H/F|\s*F/H)?$` → title=group(1) or group(2) depending on which looks like a role
+3. General fallback: use cleaned subject as `job_title`, company='Not disclosed'
+
+If a title is extracted: INSERT `parse_status='pending'`, `parse_notes='Subject-parsed (HTML-only body — verify location/salary)'`, mark with low confidence (see multi-listing rules below — treat as score=2).
+
+If subject gives no useful info: INSERT `parse_status='manual_check'`, `parse_notes='[Source] HTML-only — open Gmail link to review and paste JD'`.
+
+In all cases: `raw_body` = subject + ' | ' + snippet (truncated to 500 chars).
 
 **Alert keyword** (extract once per thread, try in order):
 1. `pour (.+?) (?:à|en|dans|sur)` → group 1
@@ -86,6 +111,26 @@ Trim whitespace, strip trailing punctuation.
 
 **Source from sender:** `jobalert.indeed.com`→`Indeed` · `linkedin.com`→`LinkedIn` · `alertes.cadremploi.fr`→`Cadremploi` · `offres@diffusion.apec.fr`→`APEC` · else→`Direct`
 
+**Multi-listing emails** — apply when subject or body indicates multiple jobs ("X offres", "X jobs", 3+ titles visible in body):
+
+Pass 1 (boundary detection): scan full body, identify ALL job titles in order with approximate line position. Count = N.
+
+Pass 2 (bounded extraction): for each of N titles, extract fields ONLY from the block between that title and the next title boundary or separator.
+
+**Confidence scoring** (per listing — assign before INSERT):
+- +2 company found in same block as title
+- +2 job URL found in same block as title
+- +1 location found in same block
+- +1 salary found in same block
+- −5 any field appears ONLY in a different listing's block
+
+Routing by score:
+- ≥ 3 → `parse_status='pending'`
+- 1–2 → `parse_status='pending'`, `parse_notes='low-confidence multi-listing parse — verify fields'`
+- ≤ 0 → `parse_status='manual_check'`, `parse_notes='multi-listing attribution failed — open Gmail to review'`
+
+**Integrity rule:** never assign a company to listing N if it only appears in listing M's block. Use `'Not disclosed'` and take the −5 penalty instead of guessing.
+
 **URL dedup — before each INSERT:** If `job_url != 'Not available'`, check:
 ```sql
 SELECT id FROM listing_inbox WHERE job_url=$1 AND parse_date >= CURRENT_DATE - 7 LIMIT 1
@@ -97,10 +142,14 @@ If row returned → skip this listing (count as `url_dedup`). Continue to next l
 INSERT INTO listing_inbox
 (parse_date, gmail_thread_id, gmail_thread_url, source, alert_keyword,
  job_title, company, location, salary, job_url, contract_type,
- parse_status, english, raw_snippet)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12,$13)
+ parse_status, parse_notes, english, raw_snippet, raw_body)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 ```
-`raw_snippet` = first 200 chars of listing text (or snippet if snippet-parsed). `gmail_thread_url` = `https://mail.google.com/mail/u/0/#all/<threadId>`.
+- `raw_snippet` = first 200 chars of listing text (or snippet if snippet-parsed)
+- `raw_body` = full body text (or subject+snippet for HTML-only), truncated to 8 000 chars. Store BEFORE any parsing. Purpose: enables reprocessing; makes debugging possible by comparing raw vs. extracted.
+- `gmail_thread_url` = `https://mail.google.com/mail/u/0/#all/<threadId>`
+
+> **Note:** The `parse_notes` column must be included in the INSERT. For `parse_status='pending'` rows with a body, `parse_notes` can be null or a brief note. Only omit `parse_notes` if it is genuinely empty.
 
 ---
 
@@ -114,15 +163,17 @@ Threads found:     [N total from all 3 Gmail searches]
   Processed:        [N new threads]
 
 Listings written to listing_inbox:
-  pending:       [N]  (ready for daily scan)
-  url_dedup:     [N]  (same URL seen in last 7 days — skipped)
-  manual_check:  [N]  (APEC: N, Cadremploi: N — check manually at source)
-  errors:        [N]  (if any INSERT failed — list them)
+  pending:         [N]  (ready for daily scan)
+    of which subject-parsed: [N]  (HTML-only body — verify fields in daily scan)
+  url_dedup:       [N]  (same URL seen in last 7 days — skipped)
+  manual_check:    [N]  (APEC: N, Cadremploi: N, HelloWork: N — HTML-only; check sources)
+  errors:          [N]  (if any INSERT failed — list them)
 
 [If manual_check > 0:]
 Manual check required:
   APEC: [N] alerts — visit https://www.apec.fr/candidat/recherche-emploi.html
   Cadremploi: [N] alerts — check Gmail threads directly
+  HelloWork/Direct: [N] alerts — open Gmail threads and paste JD in /job-review
 
 [If errors > 0:]
 Failed inserts — investigate:
