@@ -90,11 +90,11 @@ c.connect()
   .then(r => {{ console.log(JSON.stringify(r.rows)); return c.end(); }})
   .catch(e => {{ console.error(e.message); process.exit(1); }});
 """
-    result = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8")
+    result = subprocess.run(["node", "-e", script], capture_output=True)
     if result.returncode != 0:
-        print(f"ERROR querying DB: {result.stderr.strip()}")
+        print(f"ERROR querying DB: {result.stderr.decode('utf-8', errors='replace').strip()}")
         sys.exit(1)
-    rows = json.loads(result.stdout.strip())
+    rows = json.loads(result.stdout.decode("utf-8"))
     if not rows:
         print(f"ERROR: No row found in job_applications with id={job_id}")
         sys.exit(1)
