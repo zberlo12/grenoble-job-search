@@ -134,27 +134,37 @@ UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
 
 ## Step 4 — Analyse pending rows
 
-### 4a — Dedup check (batch)
+### 4a — Dedup check (per-row SQL)
 
-**Run once per scan_date before the row loop — load recent entries:**
+**For each pending row, run two SQL checks before any analysis. Both use direct DB queries — no in-memory matching.**
 
+**Check 1 — URL match (hard dedup):**
 ```sql
-SELECT company, job_title, job_url
-FROM job_applications
-WHERE date_added >= CURRENT_DATE - INTERVAL '30 days'
-UNION ALL
-SELECT company, job_title, job_url
-FROM review_queue
-WHERE date_added >= CURRENT_DATE - INTERVAL '30 days'
+SELECT id FROM (
+  SELECT id FROM job_applications WHERE job_url=$1
+  UNION ALL
+  SELECT id FROM review_queue WHERE job_url=$1
+) t LIMIT 1
 ```
+Pass `[row.job_url]`. If any row returned → definite duplicate. Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
 
-Store as `recentEntries` in-memory. This single query replaces per-row UNION SELECTs.
+**Check 2 — Company + title match (ILIKE):**
+Extract the core role phrase from `row.job_title`: strip H/F, (multi-sites), Multisites, seniority suffixes, and parenthetical qualifiers. Keep the primary role noun phrase (e.g. "Responsable Administratif Financier", "Contrôleur de Gestion", "Directeur Financier").
+```sql
+SELECT id FROM (
+  SELECT id FROM job_applications
+  WHERE company ILIKE $1
+    AND job_title ILIKE $2
+    AND status NOT IN ('Dismissed', 'Rejected')
+  UNION ALL
+  SELECT id FROM review_queue
+  WHERE company ILIKE $1
+    AND job_title ILIKE $2
+) t LIMIT 1
+```
+Pass `['%<company>%', '%<core_role_phrase>%']`. If any row returned → duplicate (same company, same role family, re-post from different source). Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
 
-Expand abbreviations before matching: RAF ↔ Responsable Administratif Financier, DAF ↔ Directeur Administratif Financier, CDG ↔ Contrôleur de Gestion, FBP ↔ Finance Business Partner.
-
-**Per-row dedup:** Check each pending listing against `recentEntries` using case-insensitive partial matching on `company` + `job_title` root. If a match is found → duplicate, skip, mark listing_inbox row as processed.
-
-URL confirmation (ambiguous title match only): check `recentEntries` for matching `job_url`. Only run a targeted SQL query if the in-memory match is genuinely ambiguous (e.g., same company with multiple distinct open roles).
+If both checks return empty → not a duplicate. Proceed with analysis (Step 4b onward).
 
 ### 4b — Rescue gate (apply BEFORE standard ranking)
 

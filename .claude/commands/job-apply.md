@@ -125,14 +125,18 @@ Do NOT proceed to Step 1b without a Job Description.
 
 For check 4, run:
 ```sql
-SELECT id FROM job_applications
+SELECT id, job_title, status FROM job_applications
 WHERE company ILIKE $1
   AND status IN ('Applied', 'Docs Ready', 'Interview', 'Offer')
   AND id != $2
 ```
 
+**Check 4 is a hard stop — no override.** If a row is returned, output:
+`🚫 Duplicate blocked — [Company] already has an active row (id=[id], "[job_title]", status=[status]). Documents cannot be drafted for a second row at the same company. Update or apply via the existing row instead.`
+Then stop. Do not proceed to Step 2.
+
+If checks 1, 2, 3, or 5 fail: display summary and ask to confirm override. If confirmed, note it and continue. If not, offer to set Status to Dismissed.
 If all five pass: `✅ Pre-flight passed — proceeding to document build.`
-If any fail: display summary and ask to confirm override. If confirmed, note it and continue. If not, offer to set Status to Dismissed.
 
 ---
 
