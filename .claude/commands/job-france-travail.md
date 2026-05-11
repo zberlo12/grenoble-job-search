@@ -234,7 +234,8 @@ Ask the user three questions:
 2. Last month ([previous month])
 3. All history
 4. Custom period (ask for start and end date)
-5. This week
+5. This week (Sun → today)
+6. Last week (Sun → Sat, previous week)
 
 **Profondeur :**
 1. Obligatoire seulement — candidatures, entretiens, contacts recruteur
@@ -246,6 +247,8 @@ Ask the user three questions:
 2. Déclaré seulement — show what has already been reported
 3. Tout sauf Exclu — full history minus deliberately excluded entries
 4. Tout — complete log including Exclu entries (audit view)
+
+**Week boundaries (Sun–Sat):** "This week" = `CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::int` → today. "Last week" = that Sunday − 7 days → that Sunday − 1 day.
 
 Build the SQL filter from these answers:
 
@@ -606,16 +609,16 @@ Comment template:
 
 ```sql
 SELECT
-  EXTRACT(ISOYEAR FROM date_added)::int AS isoyear,
-  EXTRACT(WEEK FROM date_added)::int AS isoweek,
-  MIN(date_added) AS week_start,
+  (date_added::date - EXTRACT(DOW FROM date_added)::int) AS week_start,
   COUNT(*) FILTER (WHERE status != 'Dismissed') AS evalues,
   COUNT(*) FILTER (WHERE status IN ('Applied','Docs Ready','Interview','Offer','Rejected')
     AND date_applied IS NOT NULL) AS candidatures
 FROM job_applications
-GROUP BY isoyear, isoweek
-ORDER BY isoyear, isoweek
+GROUP BY week_start
+ORDER BY week_start
 ```
+
+Weeks run **Sunday → Saturday**. `week_start` is always the Sunday opening the week.
 
 Build a week-by-week table sorted chronologically:
 
@@ -625,18 +628,20 @@ FRANCE TRAVAIL — Activité hebdomadaire
 Depuis : [earliest date] → [today]
 ═══════════════════════════════════════════════════════════
 
-Semaine              Début       Évalués   Candidatures
+Semaine (dim→sam)    Évalués   Candidatures
 ──────────────────────────────────────────────────────────
-W41 2025             06/10/25        8            3
-W42 2025             13/10/25        5            2
+06/10 → 12/10/25         8            3
+13/10 → 19/10/25         5            2
 ...
-W15 2026             13/04/26       12            2
+04/05 → 10/05/26        12            2
 ──────────────────────────────────────────────────────────
-TOTAL                                XX           XX
-Moyenne / semaine                   X.X          X.X
+TOTAL                    XX           XX
+Moyenne / semaine       X.X          X.X
 Semaines avec ≥ 3 candidatures : X
 Semaines actives (≥ 1 candidature) : X / X total
 ```
+
+Display format: `week_start` as DD/MM and `week_start + 6` as DD/MM/YY for the closing Saturday.
 
 After displaying, offer:
 ```
