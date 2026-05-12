@@ -1,5 +1,5 @@
 ---
-description: Daily job scan — reads from listing_inbox staging table (populated by /job-email-inbox), analyses all pending rows, routes results to Supabase, sends a Gmail draft digest. Runs automatically each morning at 00:01. Do not invoke manually unless testing.
+description: Daily job scan — drains the listing_inbox staging table (populated by /job-email-inbox), analyses all pending rows, routes results to Supabase, sends a Gmail draft digest. Run /job-email-inbox first to populate the queue, then run this skill to process it.
 argument-hint: Optional MM/DD/YY for a single day, or MM/DD/YY+ to catch up from that date through yesterday. Default (no arg) scans yesterday.
 allowed-tools: mcp__claude_ai_Gmail__create_draft, Bash
 ---
@@ -8,9 +8,7 @@ allowed-tools: mcp__claude_ai_Gmail__create_draft, Bash
 
 ## Step 0 — Load Config
 
-**Choose DB mode based on what credentials are available:**
-
-**pg mode (local sessions):** Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, plus salary floors and location zones.
+Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, plus salary floors and location zones.
 
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
@@ -22,37 +20,6 @@ c.connect()
   .catch(e=>{console.error(e.message);process.exit(1);});
 "
 ```
-
-**REST API mode (remote triggers):** When `SUPABASE_URL` and `SUPABASE_KEY` are provided via trigger config instead (TCP ports 5432/6543 are blocked in remote environments), skip `cat config.json` and use `curl` for all DB calls:
-
-```bash
-# SELECT
-curl -s "SUPABASE_URL/rest/v1/<table>?<filters>&select=<cols>&order=<col>.<dir>&limit=<n>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY"
-
-# INSERT (returns inserted row)
-curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
-  -H "Content-Type: application/json" -H "Prefer: return=representation" \
-  -d '<JSON>'
-
-# UPDATE
-curl -s -X PATCH "SUPABASE_URL/rest/v1/<table>?<filter>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
-  -H "Content-Type: application/json" \
-  -d '<JSON>'
-
-# UPSERT (ON CONFLICT DO UPDATE)
-curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
-  -H "Content-Type: application/json" \
-  -H "Prefer: resolution=merge-duplicates,return=representation" \
-  -d '<JSON>'
-```
-
-Filter operators: `col=eq.val` · `col=ilike.*val*` · `col=gte.val` · `col=lt.val` · `col=in.(a,b)` · `col=not.in.(a,b)` — multiple filters ANDed with `&`.
-UNION dedup: run two separate GETs (job_applications + review_queue) and treat as found if either returns results.
-Auto-expiry notes append: GET matching rows first, then PATCH each with concatenated notes value.
 
 ---
 
