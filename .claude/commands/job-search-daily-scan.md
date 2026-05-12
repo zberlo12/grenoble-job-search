@@ -1,6 +1,5 @@
 ---
 description: Daily job scan — drains the listing_inbox staging table (populated by /job-email-inbox), analyses all pending rows, routes results to Supabase, sends a Gmail draft digest. Run /job-email-inbox first to populate the queue, then run this skill to process it.
-argument-hint: Optional MM/DD/YY for a single day, or MM/DD/YY+ to catch up from that date through yesterday. Default (no arg) scans yesterday.
 allowed-tools: mcp__claude_ai_Gmail__create_draft, Bash
 ---
 
@@ -23,54 +22,29 @@ c.connect()
 
 ---
 
-## Step 1 — Determine Scan Dates
+## Step 1 — Read listing_inbox
 
-Parse `$ARGUMENTS`:
-- **Empty** → scan yesterday only, then run automatic catch-up check.
-- **`MM/DD/YY`** → scan that single date only.
-- **`MM/DD/YY+`** → scan from that date through yesterday.
-
-Today's date comes from the `currentDate` context variable. Never scan today itself.
-
-**Automatic catch-up check (when $ARGUMENTS is empty):**
-```sql
-SELECT scan_date FROM scan_archive ORDER BY scan_date DESC LIMIT 1
-```
-- If gap between most-recent scan_date and yesterday > 1 day → expand scan range from (most-recent + 1 day) through yesterday. Add "⚠️ Catch-up scan ([N] days missed)" to each date's digest.
-- If no rows in scan_archive → scan yesterday only (first run).
-
-**Run Steps 2–4 and Step 6a once per date**, in chronological order. Step 5 (Gmail digest) runs once after all dates complete.
-
----
-
-## Step 2 — Read listing_inbox
-
-Run two queries in parallel for the current scan_date:
+Run two queries in parallel:
 
 **Query A — Pending rows** (readable listings to analyse):
 ```sql
 SELECT * FROM listing_inbox
-WHERE parse_date=$1 AND parse_status='pending'
+WHERE parse_status='pending'
 ORDER BY created_at ASC
 ```
 
 **Query B — Manual check rows** (HTML-only, route directly to review_queue):
 ```sql
 SELECT * FROM listing_inbox
-WHERE parse_date=$1 AND parse_status='manual_check'
+WHERE parse_status='manual_check'
 ORDER BY created_at ASC
 ```
 
-**If both return 0 rows:**
-```sql
-SELECT COUNT(*)::int AS total FROM listing_inbox WHERE parse_date=$1
-```
-- `total > 0` → all rows already processed. Note "already done" in digest and continue to next date.
-- `total = 0` → pre-processor never ran. Note "⚠️ No listing_inbox rows for [date] — run /job-email-inbox [MM/DD/YY]" and continue.
+**If both return 0 rows:** queue is empty — skip to Step 4 and note "Queue empty — nothing to process" in the digest.
 
 ---
 
-## Step 3 — Route manual_check rows to review_queue
+## Step 2 — Route manual_check rows to review_queue
 
 For each row from Query B:
 
@@ -99,9 +73,9 @@ UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
 
 ---
 
-## Step 4 — Analyse pending rows
+## Step 3 — Analyse pending rows
 
-### 4a — Dedup check (per-row SQL)
+### 3a — Dedup check (per-row SQL)
 
 **For each pending row, run two SQL checks before any analysis. Both use direct DB queries — no in-memory matching.**
 
@@ -131,9 +105,9 @@ SELECT id FROM (
 ```
 Pass `['%<company>%', '%<core_role_phrase>%']`. If any row returned → duplicate (same company, same role family, re-post from different source). Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
 
-If both checks return empty → not a duplicate. Proceed with analysis (Step 4b onward).
+If both checks return empty → not a duplicate. Proceed with analysis (Step 3b onward).
 
-### 4b — Rescue gate (apply BEFORE standard ranking)
+### 3b — Rescue gate (apply BEFORE standard ranking)
 
 **Operational/non-finance gate (check first):**
 If the role is operational, logistics, supply chain, manufacturing, or non-finance project management (i.e. not primarily a finance/accounting/controlling title) → always route to `status='Needs Info'`, `priority='B'`, `notes` starts with `'OPERATIONAL ROLE — review for fit'`. Do not apply standard ranking. Do not dismiss.
@@ -149,7 +123,7 @@ If ALL of the following are true:
 
 **Tiebreaker:** When genuinely unclear, always route to Needs Info. Only assign Dismissed when a disqualifier is unambiguous.
 
-### 4c — Standard priority criteria (fully-populated listings only)
+### 3c — Standard priority criteria (fully-populated listings only)
 
 **Location zones** (from config):
 - Green (0–25 min): Grenoble, Échirolles, Meylan, Saint-Égrève, Pont-de-Claix, Montbonnot, Crolles, Voreppe, Bernin, Saint-Martin-d'Hères, dept 38 core towns
@@ -163,7 +137,7 @@ If ALL of the following are true:
 - **C**: Multiple mismatches or one disqualifying factor → `review_queue` `To Assess`
 - **Dismissed**: Definitive disqualifier (Paris on-site, explicitly entry-level with ≤3 years required, <€40K stated, truly unrelated role — IT development, medical, marketing, HR professional, legal, education) → `job_applications` `Dismissed`, populate `red_flags`, `notes='Auto-dismissed: [reason]'`. Operational/logistics/supply chain/PM roles are NEVER auto-dismissed — see rescue gate above.
 
-### 4d — Write to Supabase
+### 3d — Write to Supabase
 
 | Outcome | Table | Status |
 |---|---|---|
@@ -199,16 +173,16 @@ Field notes:
 - `cv_approach` (job_applications only): `'FP&A Focus'` / `'Cost Control Focus'` / `'Standard'` / `'Transformation Focus'`
 - `job_description` = full JD text truncated to ~4000 chars; null if unobtainable
 
-### 4e — Mark processed
+### 3e — Mark processed
 
 After each successful INSERT:
 ```sql
 UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
 ```
 
-### 4f — Capture company to target list (batch, silent)
+### 3f — Capture company to target list (batch, silent)
 
-**Run once per scan_date before the row loop — load existing companies:**
+**Run once before the row loop — load existing companies:**
 
 ```sql
 SELECT company FROM target_companies
@@ -218,7 +192,7 @@ Store as `existingCompanies` (in-memory). Check new companies against this list 
 
 **Skip if company matches any of:** `'Not disclosed'`, `'DAF-ACTIVE'`, blank, or a string that contains `Agence`, `Cabinet de recrutement`, `Recruteur indépendant`, `RH Partenaires`, or `Bras Droit` (known agency/freelance-network placeholders that are not real employer targets).
 
-**During Step 4:** After each non-Dismissed INSERT, add company to `newCompanies[]` if not in `existingCompanies` (case-insensitive partial match).
+**During Step 3:** After each non-Dismissed INSERT, add company to `newCompanies[]` if not in `existingCompanies` (case-insensitive partial match).
 
 **After all rows processed — INSERT all new companies:**
 
@@ -232,11 +206,11 @@ Run one INSERT per new company. Track total inserted for the digest.
 
 ---
 
-## Step 5 — Write scan_archive + send Gmail draft digest
+## Step 4 — Write scan_archive + send Gmail draft digest
 
-### 5a — scan_archive
+### 4a — scan_archive
 
-**Runs once per scan_date (inside the per-date loop).** Write one row per date — do not batch all dates into a single write.
+Use today's date (`currentDate` from context) as `scan_date`.
 
 ```sql
 INSERT INTO scan_archive
@@ -250,16 +224,16 @@ ON CONFLICT (scan_date) DO UPDATE SET
   to_assess=EXCLUDED.to_assess,
   dismissed=EXCLUDED.dismissed
 ```
-Pass `[scan_date, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count]`.
+Pass `[today, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count]`.
 
-`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows + manual_check rows routed in Step 3.
+`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows + manual_check rows routed in Step 2.
 
-### 5b — Gmail draft digest
+### 4b — Gmail draft digest
 
 Call `mcp__claude_ai_Gmail__create_draft` with:
 - `to`: `zberlo12@gmail.com`
-- `subject`: `Job Scan Digest — [scan_date]` (if multiple dates: `Job Scan Digest — [first_date] to [last_date]`)
-- `body`: plain text, one section per scan date:
+- `subject`: `Job Scan Digest — [today]`
+- `body`: plain text:
 
 ```
 Job Scan Digest — YYYY-MM-DD
@@ -290,4 +264,4 @@ New companies → target list: [N]  (run /job-search-target-companies C to check
 scan_archive: written ✅
 ```
 
-If no listings were found for a date, write: `No new listings for YYYY-MM-DD.`
+If the queue was empty, write: `Queue empty — no pending rows in listing_inbox.`
