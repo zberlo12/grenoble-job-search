@@ -34,6 +34,7 @@ c.connect()
 Parse `$ARGUMENTS`:
 - **Empty** → **Batch mode**: fetch all Tier C companies and qualify them as a group.
 - **Company name** → **Single mode**: fetch and qualify that one company (any tier).
+- **`--ruflow`** → **Parallel mode**: fetch all Tier C companies, then spawn a RuFlow swarm (hierarchical topology) where each tactical agent researches one company simultaneously (Rung 1 + Rung 2). Aggregate results into the comparison table (Step 3a). Use this when the Tier C queue has 5+ companies. Invoke via: "Use the claude-flow swarm to research each company in parallel. Spawn one researcher agent per company using hierarchical topology."
 
 **Batch — fetch Tier C queue:**
 ```sql

@@ -126,10 +126,12 @@ Pass 2 (bounded extraction): for each of N titles, extract fields ONLY from the 
 
 Routing by score:
 - ≥ 3 → `parse_status='pending'`
-- 1–2 → `parse_status='pending'`, `parse_notes='low-confidence multi-listing parse — verify fields'`
+- 1–2 → `parse_status='manual_check'`, `parse_notes='low-confidence multi-listing parse — open Gmail to verify fields'`
 - ≤ 0 → `parse_status='manual_check'`, `parse_notes='multi-listing attribution failed — open Gmail to review'`
 
 **Integrity rule:** never assign a company to listing N if it only appears in listing M's block. Use `'Not disclosed'` and take the −5 penalty instead of guessing.
+
+**Alert keyword / title rule:** The `alert_keyword` value (extracted above) must NEVER be copied into `job_title`. If title extraction produces a value identical to the alert_keyword (after trimming), treat it as an extraction failure and mark the row `parse_status='manual_check'` with `parse_notes='Title indistinguishable from alert keyword — verify manually'`.
 
 **URL dedup — before each INSERT:** If `job_url != 'Not available'`, check:
 ```sql

@@ -155,16 +155,61 @@ RETURNING id
 All new entries default to `statut_declaration = 'À déclarer'`.
 Pass `job_application_id` for candidature entries, `contact_id` for réseau entries, `NULL` otherwise.
 
+### Monthly standing entries
+
+After the candidature and networking sync, check if the current month already has two standing monthly entries (source = `Auto-Mensuel`):
+
+```sql
+SELECT COUNT(*) AS cnt FROM france_travail_log
+WHERE categorie = 'Administratif'
+  AND source = 'Auto-Mensuel'
+  AND (date AT TIME ZONE '<TZ>')::date >= date_trunc('month', CURRENT_DATE)::date
+  AND (date AT TIME ZONE '<TZ>')::date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+```
+
+If cnt < 2, insert the missing entries:
+
+```sql
+-- Entry 1: monthly job search log
+INSERT INTO france_travail_log
+(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes)
+VALUES (
+  'Suivi mensuel — Recherche d''emploi active',
+  date_trunc('month', CURRENT_DATE),
+  'Administratif', 'Optionnel',
+  'Bilan mensuel de recherche d''emploi',
+  'En ligne', 'Auto-Mensuel', 'À déclarer',
+  'Entrée mensuelle automatique'
+)
+ON CONFLICT DO NOTHING RETURNING id;
+
+-- Entry 2: monthly follow-up log
+INSERT INTO france_travail_log
+(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes)
+VALUES (
+  'Suivi mensuel — Relances et suivis de candidatures',
+  date_trunc('month', CURRENT_DATE),
+  'Administratif', 'Optionnel',
+  'Relances et suivis — bilan mensuel',
+  'En ligne', 'Auto-Mensuel', 'À déclarer',
+  'Entrée mensuelle automatique'
+)
+ON CONFLICT DO NOTHING RETURNING id;
+```
+
+Count any created monthly entries in the sync summary.
+
 ### Sync summary
 
 After processing, report:
 ```
-Synchronisation terminée
+Sync complete
 ─────────────────────────
-Entrées créées :  X
-Déjà existantes : Y
+New entries:     X
+Already exists:  Y
+Monthly entries: X created / already present
 ─────────────────────────
-Sources : Z candidatures, W contacts réseau
+Sources: Z applications, W networking contacts
 ```
 
 ---
@@ -173,7 +218,7 @@ Sources : Z candidatures, W contacts réseau
 
 Prompt the user in order (accept any format for date):
 
-1. **Date de l'action** (e.g. "aujourd'hui", "15/04", "2026-04-10")
+1. **Date of action** (e.g. "today", "15/04", "2026-04-10")
 2. **Catégorie** — show numbered list:
    ```
    1. Candidature         (Obligatoire)
@@ -188,11 +233,11 @@ Prompt the user in order (accept any format for date):
    10. Administratif      (Optionnel)
    11. Autre              (Optionnel)
    ```
-3. **Entreprise / Organisme** (or "—" if not applicable)
-4. **Poste / Sujet** (role title, course name, event name, etc.)
-5. **Mode de contact** (Email / Téléphone / Visio / Présentiel / En ligne / Courrier)
+3. **Company / Organisation** (or "—" if not applicable)
+4. **Role / Subject** (role title, course name, event name, etc.)
+5. **Mode of contact** (Email / Téléphone / Visio / Présentiel / En ligne / Courrier)
 6. **Notes** (optional — press Enter to skip)
-7. **Déclarer à France Travail ?** — suggest based on Priorité:
+7. **Declare to France Travail?** — suggest based on Priorité:
    - If Obligatoire or Impactant: suggest `À déclarer`
    - If Optionnel: suggest `Exclu` but let Zack override to `À déclarer`
 
@@ -202,14 +247,14 @@ Source: `Manuel`.
 
 Confirm before creating:
 ```
-Créer cette entrée ?
-  Date :              2026-04-15
-  Catégorie :         Formation  (Optionnel)
-  Entreprise :        Coursera
-  Sujet :             Financial Modelling in Excel
-  Mode :              En ligne
-  Statut décl. :      Exclu
-[O/N]
+Create this entry?
+  Date:               2026-04-15
+  Category:           Formation  (Optionnel)
+  Company:            Coursera
+  Subject:            Financial Modelling in Excel
+  Mode:               En ligne
+  Status:             Exclu
+[Y/N]
 ```
 
 INSERT into france_travail_log:

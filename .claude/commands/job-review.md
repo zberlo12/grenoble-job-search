@@ -101,7 +101,8 @@ Loop through every Needs Info row. For each row, attempt auto-enrichment using t
 - `notes` contains `OPERATIONAL ROLE` — enrichment won't change routing; needs human judgment
 - `job_url` is null, `'Not available'`, or a `linkedin.com` URL — all rungs will fail
 
-For rows matching any pre-filter condition: add directly to the manual-paste list with reason `UNREADABLE`, `OPERATIONAL`, or `LinkedIn — blocked`. Do not attempt any rung.
+For `UNREADABLE` or `LinkedIn — blocked` rows: add directly to the manual-paste list. Do not attempt any rung.
+For `OPERATIONAL ROLE` rows: add to the **operational-roles list** (presented in a K/U/D table at the end of Step 5 — not manual-paste). Do not attempt any rung.
 
 **Context-hygiene rule:** If a fetched page exceeds ~8K characters, extract only the structured fields (salary, location, hybrid/remote, scope, language, contract type, seniority) and discard the rest.
 
@@ -205,6 +206,60 @@ For each confirmed row: INSERT into job_applications (Step 4a) + DELETE from rev
 
 If Group B is empty, skip this step.
 
+### Operational Roles (from pre-filter)
+
+If any Group A rows were pre-filtered as `OPERATIONAL ROLE`, present them now in the same K/U/D table format:
+
+```
+## Operational Roles — [N] for review
+
+| # | Title | Company | 📍 Source | Note | 🔗 |
+|---|---|---|---|---|---|
+| 1 | [title] | [company] | [source] | Operational role | [link](url) or — |
+```
+
+Default recommendation is **[D] Dismiss** for all. Same K/U/D options apply.
+For each row: INSERT into job_applications (Step 4a, status=Dismissed) + DELETE from review_queue (Step 4b).
+If no pre-filtered operational rows: skip this section.
+
+---
+
+## Step 5b — Potentially Apply K/U/D Pass
+
+After the queue is fully drained, fetch all `Potentially Apply` rows from the main pipeline for a quick triage pass — no separate skill needed.
+
+```sql
+SELECT id, job_title, company, location, salary, priority, red_flags, notes, job_url, date_added
+FROM job_applications
+WHERE status = 'Potentially Apply'
+ORDER BY priority ASC, date_added ASC
+```
+
+If no rows: skip this step.
+
+Present in the same K/U/D table format as Step 5:
+
+```
+## Potentially Apply — [N] rows
+
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note | 🔗 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | [zone] | [salary or —] | [B/C] | [flags or —] | [1-line note] | [link](url) or — |
+```
+
+Options:
+- **[K] Keep** — stays as `Potentially Apply` (no DB write)
+- **[U] Upgrade** — promote to `To Apply`
+- **[D] Dismiss** — move to `Dismissed`
+
+Zack can respond all at once (e.g. `1K 2U 3D`) or one at a time.
+
+Apply changes:
+- U: `UPDATE job_applications SET status='To Apply' WHERE id=$1`
+- D: `UPDATE job_applications SET status='Dismissed' WHERE id=$1`
+
+Include Potentially Apply outcomes in the Step 8 final summary.
+
 ---
 
 ## Step 6 — Manual Paste Loop (for remaining Group A rows)
@@ -249,6 +304,11 @@ If enriched data reveals a clear disqualifier (Paris on-site, salary stated belo
 ### Group B — To Assess
 **Confirmed:** [N]
 **Left in queue:** [N]
+
+### Potentially Apply Pass
+**Upgraded to `To Apply`:** [N] — [titles or "none"]
+**Dismissed:** [N]
+**Left as `Potentially Apply`:** [N]
 
 ### Outcomes (job_applications)
 **Moved to `To Apply`:** [N] — [titles]
