@@ -5,6 +5,8 @@ allowed-tools: mcp__claude_ai_Gmail__create_draft, Bash
 
 # Daily Job Scan
 
+**Execution mode: silent.** Do not narrate steps, explain decisions, or summarise intermediate results. Output only the final digest report at the end.
+
 ## Step 0 — Load Config
 
 Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, plus salary floors and location zones.

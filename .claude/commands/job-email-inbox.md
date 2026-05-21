@@ -6,6 +6,8 @@ allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_t
 
 # Job Email Inbox Pre-Processor
 
+**Execution mode: silent.** Do not narrate steps, explain decisions, or summarise intermediate results. Output only the Step 4 report at the end.
+
 ## Step 0 — Load Config
 
 Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL.
