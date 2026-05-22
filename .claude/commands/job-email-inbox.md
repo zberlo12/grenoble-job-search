@@ -6,11 +6,23 @@ allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_t
 
 # Job Email Inbox Pre-Processor
 
+## Pre-check — Confirm active user
+
+**Before doing anything else**, run `cat config.json`, read `user.name` and `user.email`, then display this message and wait for the user's reply:
+
+> Active profile: **[user.name]** ([user.email])
+> This skill will read Gmail and write listing data for this user.
+> Reply **yes** to continue, or **no** to abort.
+
+If the user replies anything other than yes / y / oui, stop immediately without executing any further steps.
+
+---
+
 **Execution mode: silent.** Do not narrate steps, explain decisions, or summarise intermediate results. Output only the Step 4 report at the end.
 
 ## Step 0 — Load Config
 
-Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL.
+Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL, `user.profile_id` → USER_PROFILE.
 
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
@@ -52,9 +64,9 @@ Merge all three results, de-duplicate by `threadId`.
 ### 3a — Thread dedup (skip if already parsed today)
 
 ```sql
-SELECT id FROM listing_inbox WHERE gmail_thread_id=$1 AND parse_date=$2 LIMIT 1
+SELECT id FROM listing_inbox WHERE gmail_thread_id=$1 AND parse_date=$2 AND user_profile=$3 LIMIT 1
 ```
-If row returned → skip thread (count as duplicate).
+Pass `[threadId, parseDate, USER_PROFILE]`. If row returned → skip thread (count as duplicate).
 
 ### 3b — Route by source
 
@@ -137,18 +149,19 @@ Routing by score:
 
 **URL dedup — before each INSERT:** If `job_url != 'Not available'`, check:
 ```sql
-SELECT id FROM listing_inbox WHERE job_url=$1 AND parse_date >= CURRENT_DATE - 7 LIMIT 1
+SELECT id FROM listing_inbox WHERE job_url=$1 AND parse_date >= CURRENT_DATE - 7 AND user_profile=$2 LIMIT 1
 ```
-If row returned → skip this listing (count as `url_dedup`). Continue to next listing.
+Pass `[jobUrl, USER_PROFILE]`. If row returned → skip this listing (count as `url_dedup`). Continue to next listing.
 
 **INSERT:**
 ```sql
 INSERT INTO listing_inbox
 (parse_date, gmail_thread_id, gmail_thread_url, source, alert_keyword,
  job_title, company, location, salary, job_url, contract_type,
- parse_status, parse_notes, english, raw_snippet, raw_body)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+ parse_status, parse_notes, english, raw_snippet, raw_body, user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 ```
+`$17` = USER_PROFILE.
 - `raw_snippet` = first 200 chars of listing text (or snippet if snippet-parsed)
 - `raw_body` = full body text (or subject+snippet for HTML-only), truncated to 8 000 chars. Store BEFORE any parsing. Purpose: enables reprocessing; makes debugging possible by comparing raw vs. extracted.
 - `gmail_thread_url` = `https://mail.google.com/mail/u/0/#all/<threadId>`

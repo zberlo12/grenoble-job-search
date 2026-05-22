@@ -5,11 +5,23 @@ allowed-tools: mcp__claude_ai_Gmail__create_draft, Bash
 
 # Daily Job Scan
 
+## Pre-check — Confirm active user
+
+**Before doing anything else**, run `cat config.json`, read `user.name` and `user.email`, then display this message and wait for the user's reply:
+
+> Active profile: **[user.name]** ([user.email])
+> This skill will analyse listings and write job data for this user.
+> Reply **yes** to continue, or **no** to abort.
+
+If the user replies anything other than yes / y / oui, stop immediately without executing any further steps.
+
+---
+
 **Execution mode: silent.** Do not narrate steps, explain decisions, or summarise intermediate results. Output only the final digest report at the end.
 
 ## Step 0 — Load Config
 
-Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, plus salary floors and location zones.
+Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `user.profile_id` → USER_PROFILE, plus salary floors and location zones.
 
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
@@ -31,14 +43,14 @@ Run two queries in parallel:
 **Query A — Pending rows** (readable listings to analyse):
 ```sql
 SELECT * FROM listing_inbox
-WHERE parse_status='pending'
+WHERE parse_status='pending' AND user_profile=USER_PROFILE
 ORDER BY created_at ASC
 ```
 
 **Query B — Manual check rows** (HTML-only, route directly to review_queue):
 ```sql
 SELECT * FROM listing_inbox
-WHERE parse_status='manual_check'
+WHERE parse_status='manual_check' AND user_profile=USER_PROFILE
 ORDER BY created_at ASC
 ```
 
@@ -53,25 +65,26 @@ For each row from Query B:
 **Dedup check:**
 ```sql
 SELECT id FROM review_queue
-WHERE gmail_thread_url=$1 AND notes ILIKE '%UNREADABLE%'
+WHERE gmail_thread_url=$1 AND notes ILIKE '%UNREADABLE%' AND user_profile=$2
 LIMIT 1
 ```
-If found → skip (already queued).
+Pass `[row.gmail_thread_url, USER_PROFILE]`. If found → skip (already queued).
 
 **If not queued — INSERT:**
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
- job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,listing_inbox_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+ job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,listing_inbox_id,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 RETURNING id
 ```
-Values: `job_title`=row.job_title, `company`='Not disclosed', `source`=row.source, `location`=null, `salary`=null, `priority`='B', `status`='Needs Info', `date_added`=row.parse_date, `job_url`=row.job_url, `gmail_thread_url`=row.gmail_thread_url, `red_flags`='[]', `missing_info`='["Full JD"]', `alert_keyword`=row.alert_keyword, `notes`='UNREADABLE: '+row.parse_notes+' — open Gmail link to review and paste JD', `english`=false, `listing_inbox_id`=row.id.
+Values: `job_title`=row.job_title, `company`='Not disclosed', `source`=row.source, `location`=null, `salary`=null, `priority`='B', `status`='Needs Info', `date_added`=row.parse_date, `job_url`=row.job_url, `gmail_thread_url`=row.gmail_thread_url, `red_flags`='[]', `missing_info`='["Full JD"]', `alert_keyword`=row.alert_keyword, `notes`='UNREADABLE: '+row.parse_notes+' — open Gmail link to review and paste JD', `english`=false, `listing_inbox_id`=row.id, `user_profile`=USER_PROFILE.
 
 **After INSERT → mark processed:**
 ```sql
-UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
+UPDATE listing_inbox SET parse_status='processed' WHERE id=$1 AND user_profile=$2
 ```
+Pass `[row.id, USER_PROFILE]`.
 
 ---
 
@@ -84,12 +97,12 @@ UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
 **Check 1 — URL match (hard dedup):**
 ```sql
 SELECT id FROM (
-  SELECT id FROM job_applications WHERE job_url=$1
+  SELECT id FROM job_applications WHERE job_url=$1 AND user_profile=$2
   UNION ALL
-  SELECT id FROM review_queue WHERE job_url=$1
+  SELECT id FROM review_queue WHERE job_url=$1 AND user_profile=$2
 ) t LIMIT 1
 ```
-Pass `[row.job_url]`. If any row returned → definite duplicate. Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
+Pass `[row.job_url, USER_PROFILE]`. If any row returned → definite duplicate. Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
 
 **Check 2 — Company + title match (ILIKE):**
 Extract the core role phrase from `row.job_title`: strip H/F, (multi-sites), Multisites, seniority suffixes, and parenthetical qualifiers. Keep the primary role noun phrase (e.g. "Responsable Administratif Financier", "Contrôleur de Gestion", "Directeur Financier").
@@ -99,13 +112,15 @@ SELECT id FROM (
   WHERE company ILIKE $1
     AND job_title ILIKE $2
     AND status NOT IN ('Dismissed', 'Rejected')
+    AND user_profile=$3
   UNION ALL
   SELECT id FROM review_queue
   WHERE company ILIKE $1
     AND job_title ILIKE $2
+    AND user_profile=$3
 ) t LIMIT 1
 ```
-Pass `['%<company>%', '%<core_role_phrase>%']`. If any row returned → duplicate (same company, same role family, re-post from different source). Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
+Pass `['%<company>%', '%<core_role_phrase>%', USER_PROFILE]`. If any row returned → duplicate (same company, same role family, re-post from different source). Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
 
 If both checks return empty → not a duplicate. Proceed with analysis (Step 3b onward).
 
@@ -152,19 +167,21 @@ If ALL of the following are true:
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
- job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description,listing_inbox_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+ job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description,listing_inbox_id,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 RETURNING id
 ```
+`$18` = USER_PROFILE.
 
 **For job_applications rows:**
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,date_added,
- job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description,listing_inbox_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+ job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,job_description,listing_inbox_id,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 RETURNING id
 ```
+`$19` = USER_PROFILE.
 
 Field notes:
 - `date_added` = `row.parse_date` (the email date, not today)
@@ -179,15 +196,16 @@ Field notes:
 
 After each successful INSERT:
 ```sql
-UPDATE listing_inbox SET parse_status='processed' WHERE id=$1
+UPDATE listing_inbox SET parse_status='processed' WHERE id=$1 AND user_profile=$2
 ```
+Pass `[row.id, USER_PROFILE]`.
 
 ### 3f — Capture company to target list (batch, silent)
 
 **Run once before the row loop — load existing companies:**
 
 ```sql
-SELECT company FROM target_companies
+SELECT company FROM target_companies WHERE user_profile=USER_PROFILE
 ```
 
 Store as `existingCompanies` (in-memory). Check new companies against this list rather than querying per row.
@@ -199,10 +217,11 @@ Store as `existingCompanies` (in-memory). Check new companies against this list 
 **After all rows processed — INSERT all new companies:**
 
 ```sql
-INSERT INTO target_companies (company, tier, location, notes)
-VALUES ($1, 'C', $2, $3)
+INSERT INTO target_companies (company, tier, location, notes, user_profile)
+VALUES ($1, 'C', $2, $3, $4)
 RETURNING id
 ```
+`$4` = USER_PROFILE.
 
 Run one INSERT per new company. Track total inserted for the digest.
 
@@ -216,9 +235,9 @@ Use today's date (`currentDate` from context) as `scan_date`.
 
 ```sql
 INSERT INTO scan_archive
-(scan_date, digest_text, total_found, potentially_apply, needs_info, to_assess, dismissed)
-VALUES ($1,$2,$3,$4,$5,$6,$7)
-ON CONFLICT (scan_date) DO UPDATE SET
+(scan_date, digest_text, total_found, potentially_apply, needs_info, to_assess, dismissed, user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+ON CONFLICT (scan_date, user_profile) DO UPDATE SET
   digest_text=EXCLUDED.digest_text,
   total_found=EXCLUDED.total_found,
   potentially_apply=EXCLUDED.potentially_apply,
@@ -226,14 +245,14 @@ ON CONFLICT (scan_date) DO UPDATE SET
   to_assess=EXCLUDED.to_assess,
   dismissed=EXCLUDED.dismissed
 ```
-Pass `[today, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count]`.
+Pass `[today, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count, USER_PROFILE]`.
 
 `total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows + manual_check rows routed in Step 2.
 
 ### 4b — Gmail draft digest
 
 Call `mcp__claude_ai_Gmail__create_draft` with:
-- `to`: `zberlo12@gmail.com`
+- `to`: `user.email` (from config)
 - `subject`: `Job Scan Digest — [today]`
 - `body`: plain text:
 
