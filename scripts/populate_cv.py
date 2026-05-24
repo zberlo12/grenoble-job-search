@@ -29,6 +29,7 @@ import subprocess
 from pathlib import Path
 from docx import Document
 from notion_client import Client
+from docx2pdf import convert as docx2pdf_convert
 
 REPO_ROOT = Path(__file__).parent.parent
 TEMPLATES_DIR = REPO_ROOT / "templates"
