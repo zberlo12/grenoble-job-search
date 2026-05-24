@@ -183,43 +183,46 @@ Do not leave any row in the review_queue with a "resolved" marker. Either it's d
 
 ## Step 5 — Group B: To Assess Confirmation Pass
 
-After Group A is fully processed, present all Group B (To Assess) rows as a confirmation table:
+After Group A is fully processed, present all Group B (To Assess) rows as a numbered comparison table:
 
 ```
-## To Assess — [N] listings to confirm
+## To Assess — [N] listings
 
 | # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note | 🔗 |
 |---|---|---|---|---|---|---|---|---|
 | 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | [1-line scan note] | [link](url) or [Gmail](gmail_thread_url) |
 ```
 
-**Link column rule:** Always show a link. Prefer `job_url` as `[link](url)`. If `job_url` is null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
+**Link column rule:** Prefer `job_url` as `[link](url)`. If null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
 
-For each row offer three options:
-- **[K] Keep** — accept scan's priority → promotes to `Potentially Apply` (B) or `To Apply` (A) in job_applications
-- **[U] Upgrade** — override to higher priority (e.g. C→B, B→A)
-- **[D] Dismiss** — move to `Dismissed` in job_applications
+Ask:
+> "Which numbers do you want to **apply to**? List them (e.g. `1,3`) or type `all` / `none`.
+> The rest will be **dismissed** unless you add `hold` to keep them in Potentially Apply (e.g. `1,3 hold`)."
 
-Zack can respond with one letter per row (e.g. `1K 2D 3U:A`) or one at a time.
+Parse response:
+- Numbers → those rows → `status = 'To Apply'`
+- `all` → every row → `status = 'To Apply'`
+- `none` → no rows promoted
+- `hold` suffix → unpromoted rows → `status = 'Potentially Apply'`
+- Default (no `hold`) → unpromoted rows → `status = 'Dismissed'`
 
-For each confirmed row: INSERT into job_applications (Step 4a) + DELETE from review_queue (Step 4b).
-
+For each row: INSERT into job_applications (Step 4a) + DELETE from review_queue (Step 4b).
 If Group B is empty, skip this step.
 
 ### Operational Roles (from pre-filter)
 
-If any Group A rows were pre-filtered as `OPERATIONAL ROLE`, present them now in the same K/U/D table format:
+If any Group A rows were pre-filtered as `OPERATIONAL ROLE`, present them in the same numbered table format after the To Assess pass:
 
 ```
 ## Operational Roles — [N] for review
 
-| # | Title | Company | 📍 Source | Note | 🔗 |
+| # | Title | Company | 📍 Zone | Note | 🔗 |
 |---|---|---|---|---|---|
-| 1 | [title] | [company] | [source] | Operational role | [link](url) or — |
+| 1 | [title] | [company] | [zone] | Operational role | [link](url) or [Gmail](gmail_thread_url) |
 ```
 
-Default recommendation is **[D] Dismiss** for all. Same K/U/D options apply.
-For each row: INSERT into job_applications (Step 4a, status=Dismissed) + DELETE from review_queue (Step 4b).
+Ask the same question — apply / hold / dismiss. Default is dismiss.
+For each row: INSERT into job_applications (Step 4a) + DELETE from review_queue (Step 4b).
 If no pre-filtered operational rows: skip this section.
 
 ---
