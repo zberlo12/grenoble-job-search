@@ -158,9 +158,12 @@ def parse_headline_and_summary(cv_lines):
     if not cv_lines:
         return None, None
 
-    # Headline: first line containing '|' (e.g. "Contrôleur de Gestion | Finance Opérationnelle")
-    # Skips the candidate name which is typically line 0 (all caps, no '|')
-    headline = next((l for l in cv_lines if "|" in l), cv_lines[0])
+    # Headline: first line containing '|' that is NOT an education entry like "MSc ... | 2013"
+    # Education lines have '|' followed by a 4-digit year; the professional headline does not.
+    headline = next(
+        (l for l in cv_lines if "|" in l and not re.search(r'\|\s*\d{4}\b', l)),
+        cv_lines[0]
+    )
 
     # Profile summary: first line over 100 chars that isn't a section header or bullet
     summary = None

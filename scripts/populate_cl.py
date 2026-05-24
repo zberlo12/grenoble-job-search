@@ -261,9 +261,12 @@ def main():
         # Parse CL paragraphs from plain text (blank-line separated)
         cl_paras = [p.strip() for p in re.split(r"\n\s*\n", cl_text) if p.strip() and len(p.strip()) > 30]
 
-        # CV headline: first line with '|' (skips candidate name line)
+        # CV headline: first '|' line that isn't an education entry like "MSc ... | 2013"
         cv_lines = [l.strip() for l in cv_text.splitlines() if l.strip()]
-        cl_headline = next((l for l in cv_lines if "|" in l), cv_lines[0] if cv_lines else job_title)
+        cl_headline = next(
+            (l for l in cv_lines if "|" in l and not re.search(r'\|\s*\d{4}\b', l)),
+            cv_lines[0] if cv_lines else job_title
+        )
 
         # Location: use raw location from DB; add ", France" if needed
         location = raw_location.strip()
@@ -302,7 +305,10 @@ def main():
             location = location.rstrip(", ") + ", France"
 
         cv_lines = extract_section(blocks, "Tailored CV")
-        cl_headline = next((l for l in cv_lines if "|" in l), cv_lines[0] if cv_lines else job_title)
+        cl_headline = next(
+            (l for l in cv_lines if "|" in l and not re.search(r'\|\s*\d{4}\b', l)),
+            cv_lines[0] if cv_lines else job_title
+        )
 
         cl_paras = [l for l in cl_lines if len(l) > 30]
 
