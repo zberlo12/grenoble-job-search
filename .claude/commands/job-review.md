@@ -224,39 +224,46 @@ If no pre-filtered operational rows: skip this section.
 
 ---
 
-## Step 5b — Potentially Apply K/U/D Pass
+## Step 5b — Potentially Apply Promotion Pass
 
-After the queue is fully drained, fetch all `Potentially Apply` rows from the main pipeline for a quick triage pass — no separate skill needed.
+After the queue is fully drained, fetch all `Potentially Apply` rows from the main pipeline for a final go/no-go pass — this replaces the need for a separate `/job-review-weekly` skill.
 
 ```sql
-SELECT id, job_title, company, location, salary, priority, red_flags, notes, job_url, date_added
+SELECT id, job_title, company, location, salary, priority, red_flags, notes, job_url, gmail_thread_url, date_added
 FROM job_applications
 WHERE status = 'Potentially Apply'
-ORDER BY priority ASC, date_added ASC
+ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
 ```
 
 If no rows: skip this step.
 
-Present in the same K/U/D table format as Step 5:
+Present as a numbered comparison table:
 
 ```
-## Potentially Apply — [N] rows
+## Potentially Apply — [N] listings
 
 | # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note | 🔗 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | [zone] | [salary or —] | [B/C] | [flags or —] | [1-line note] | [link](url) or — |
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [B/C] | [flags or —] | [1-line note] | [link](url) or [Gmail](gmail_thread_url) |
 ```
 
-Options:
-- **[K] Keep** — stays as `Potentially Apply` (no DB write)
-- **[U] Upgrade** — promote to `To Apply`
-- **[D] Dismiss** — move to `Dismissed`
+**Link column rule:** Prefer `job_url` as `[link](url)`. If null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
 
-Zack can respond all at once (e.g. `1K 2U 3D`) or one at a time.
+Ask:
+> "Which numbers do you want to promote to **To Apply**? List them (e.g. `1,3`) or type `all` / `none`.
+> The rest will be **dismissed** unless you add `hold` to leave them in Potentially Apply (e.g. `1,3 hold`)."
+
+Parse response:
+- Numbers → those rows → `status = 'To Apply'`
+- `all` → every row → `status = 'To Apply'`
+- `none` → no rows promoted
+- `hold` suffix (e.g. `1,3 hold`) → unpromoted rows stay `Potentially Apply`
+- Default (no `hold`) → unpromoted rows → `status = 'Dismissed'`
 
 Apply changes:
-- U: `UPDATE job_applications SET status='To Apply' WHERE id=$1`
-- D: `UPDATE job_applications SET status='Dismissed' WHERE id=$1`
+- Promote: `UPDATE job_applications SET status='To Apply' WHERE id=$1`
+- Dismiss: `UPDATE job_applications SET status='Dismissed' WHERE id=$1`
+- Hold: no DB write needed
 
 Include Potentially Apply outcomes in the Step 8 final summary.
 
