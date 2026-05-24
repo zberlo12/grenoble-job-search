@@ -182,6 +182,20 @@ def french_date():
     return f"{prefix}{today.day} {MONTHS_FR[today.month]} {today.year}"
 
 
+MONTHS_EN = {
+    1: "January", 2: "February", 3: "March", 4: "April",
+    5: "May", 6: "June", 7: "July", 8: "August",
+    9: "September", 10: "October", 11: "November", 12: "December",
+}
+
+
+def english_date():
+    today = date.today()
+    city = get_base_city()
+    prefix = f"{city}, " if city else ""
+    return f"{prefix}{today.day} {MONTHS_EN[today.month]} {today.year}"
+
+
 def replace_placeholder(doc, placeholder, new_text):
     """Replace a placeholder anywhere in the document (paragraphs + tables)."""
     replaced = False
@@ -342,12 +356,21 @@ def main():
 
     doc = Document(template_path)
 
+    if lang == "en":
+        date_str      = english_date()
+        addressee_str = f"{company} — Hiring Team" if company else "{{COMPANY_ADDRESSEE}}"
+        subject_str   = f"Re: Application — {job_title}" if job_title else "{{SUBJECT_LINE}}"
+    else:
+        date_str      = french_date()
+        addressee_str = f"{company} — Service Recrutement" if company else "{{COMPANY_ADDRESSEE}}"
+        subject_str   = f"Objet : Candidature — {job_title}" if job_title else "{{SUBJECT_LINE}}"
+
     replacements = {
         "{{CL_HEADLINE}}":       cl_headline,
-        "{{DATE}}":              french_date(),
-        "{{COMPANY_ADDRESSEE}}": f"{company} — Service Recrutement" if company else "{{COMPANY_ADDRESSEE}}",
+        "{{DATE}}":              date_str,
+        "{{COMPANY_ADDRESSEE}}": addressee_str,
         "{{COMPANY_LOCATION}}":  location,
-        "{{SUBJECT_LINE}}":      f"Objet : Candidature — {job_title}" if job_title else "{{SUBJECT_LINE}}",
+        "{{SUBJECT_LINE}}":      subject_str,
         "{{OPENING_PARA}}":      opening,
         "{{BODY_PARA_1}}":       body1,
         "{{BODY_PARA_2}}":       body2,

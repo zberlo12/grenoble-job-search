@@ -285,15 +285,21 @@ Save `cv_text` and `cl_text` directly to the job row. No Notion page needed.
 - Paragraphs separated by a blank line
 - 4 paragraphs standard: opening · body1 · body2 · closing
 
+**Language detection:** Determine document language from the JD and cover letter content:
+- English JD + English CL → `doc_language = 'EN'`
+- French JD + French CL → `doc_language = 'FR'`
+- Bilingual (both) → `doc_language = 'FR + EN'`
+
 ```sql
 UPDATE job_applications
 SET cv_text = $1,
     cl_text = $2,
+    doc_language = $3,
     status = 'Docs Ready',
-    notes = COALESCE(notes,'') || $3
-WHERE id = $4
+    notes = COALESCE(notes,'') || $4
+WHERE id = $5
 ```
-Pass `[cv_text, cl_text, ' | Docs drafted ' || today_date, row_id]`.
+Pass `[cv_text, cl_text, doc_language, ' | Docs drafted ' || today_date, row_id]`.
 
 **Application Notes** (key selling points, red flags, before-submitting checklist):
 Display inline in the conversation after documents are saved — no Notion page needed.
@@ -331,10 +337,10 @@ Run both scripts via Bash from the repo root:
 
 ```bash
 py scripts/populate_cv.py --db-id [JOB_ID] --approach [FLAG]
-py scripts/populate_cl.py --db-id [JOB_ID]
+py scripts/populate_cl.py --db-id [JOB_ID] --lang [fr|en]
 ```
 
-Replace `[JOB_ID]` with the row id from Step 1 and `[FLAG]` with the mapped approach.
+Replace `[JOB_ID]` with the row id from Step 1, `[FLAG]` with the mapped approach, and `--lang` with `fr` or `en` matching the `doc_language` determined in Step 6.
 If either script fails, report the error and stop.
 
 ---
