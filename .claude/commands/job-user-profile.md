@@ -1,7 +1,7 @@
 ---
-description: Update user profile and configuration. config.json fields (salary floor, location zones, job titles, Gmail sources) via Bash. Candidate Profile page in Notion (experience, metrics, cover letter rules, tone) via notion-update-page. Trigger with /job-user-profile or when the user says "update my profile" or "change my salary / location / skills".
+description: Update user profile and configuration. config.json fields (salary floor, location zones, job titles, Gmail sources) via Bash. candidate_profile table in Postgres (experience, metrics, cover letter rules, tone) via SQL. Trigger with /job-user-profile or when the user says "update my profile" or "change my salary / location / skills".
 argument-hint: Optional. Describe what to update (e.g. "salary floor" or "add job title CFO"). Leave blank to see the full menu.
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, Bash
+allowed-tools: Bash
 ---
 
 # Profile Update
@@ -24,7 +24,7 @@ If no arguments, show the full menu:
 ```
 Profile sections you can update:
 
-config.json (instant, no Notion needed):
+config.json (instant):
   1. Salary floors        — minimum to apply / hard-reject threshold
   2. Location zones       — Green / Yellow / Orange / Red city lists
   3. Job titles           — alert keywords for searches
@@ -32,7 +32,7 @@ config.json (instant, no Notion needed):
   5. CV approaches        — approach definitions and flags
   6. Lifecycle rules      — dedup window, auto-expiry days
 
-Notion Candidate Profile (long-form content):
+candidate_profile table (long-form content):
   7. Experience & metrics  — key achievements, quantified results
   8. Cover letter rules    — writing constraints for all future CLs
   9. Writing tone          — formality, voice, avoid list
@@ -101,35 +101,55 @@ Confirm after each update: "Done — [what changed]. The change takes effect imm
 
 ---
 
-### Sections 7–10 (Notion Candidate Profile)
+### Sections 7–10 (candidate_profile table)
 
-Load the page ID from config.json: `notion.candidate_profile_id`. Then:
-1. `notion-fetch` the Candidate Profile page to read the current content.
-2. Show the relevant section to the user.
-3. Ask for the updated content.
-4. `notion-update-page` to append or replace the relevant section.
+Query the current values first via Bash, then UPDATE the relevant column.
+
+```bash
+# Read current candidate_profile row
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('SELECT experience_summary,fp_and_a_highlights,cost_control_highlights,p2p_highlights,cl_rules,tone_profile FROM candidate_profile WHERE user_email=\$1',['<user_email>']))
+  .then(r=>{console.log(JSON.stringify(r.rows[0],null,2));return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
 
 **Section 7 — Experience & metrics:**
-- Show current metrics and achievements.
+- Show current `experience_summary`, `fp_and_a_highlights`, `cost_control_highlights`, `p2p_highlights`.
 - Ask: "What new achievement or metric should I add?"
-- Append under the appropriate experience section.
+- UPDATE the relevant column, appending the new content.
 
 **Section 8 — Cover letter rules:**
-- Show current rules.
+- Show current `cl_rules`.
 - Ask: "What rule to add, change, or remove?"
-- Update the Cover Letter Writing Rules section.
+- UPDATE `cl_rules` with the revised full text.
 
 **Section 9 — Writing tone:**
-- Show current Writing Tone Profile.
+- Show current `tone_profile`.
 - Ask: "What aspect of your tone should change?"
-- Update the relevant tone fields.
+- UPDATE `tone_profile` with the revised full text.
 
 **Section 10 — Background keywords:**
-- Show current skills, systems, languages, employers.
+- Show current `experience_summary` keywords section and config.json `background` arrays.
 - Ask: "What to add or update?"
-- Update the Background Keywords section.
+- UPDATE `candidate_profile` column and/or config.json `background` arrays as appropriate.
 
-Confirm: "Done — Candidate Profile updated in Notion. The change takes effect immediately for /job-apply and /job-interview-prep."
+```bash
+# Write updated value (example — substitute column and value)
+PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
+const {Client}=require(process.env.PG_MODULE);
+const c=new Client({connectionString:process.env.PG_CONN});
+c.connect()
+  .then(()=>c.query('UPDATE candidate_profile SET <column>=\$1, updated_at=NOW() WHERE user_email=\$2',['<new_value>','<user_email>']))
+  .then(()=>{console.log('OK');return c.end();})
+  .catch(e=>{console.error(e.message);process.exit(1);});
+"
+```
+
+Confirm: "Done — Candidate Profile updated in database. The change takes effect immediately for /job-apply and /job-interview-prep."
 
 ---
 
@@ -137,4 +157,4 @@ Confirm: "Done — Candidate Profile updated in Notion. The change takes effect 
 
 - Multiple changes in one session: after each update, ask "Anything else to update?"
 - config.json changes are local — the file is gitignored, so they stay on this machine.
-- Notion Candidate Profile changes are synced to Notion and visible immediately.
+- candidate_profile changes write directly to Supabase and are visible immediately.

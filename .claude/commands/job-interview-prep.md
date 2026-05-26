@@ -12,10 +12,9 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
+- `user.profile_id` → user_profile
 - `user.base_city` → base location
 - `background` → functional_expertise, key_systems (for fit assessment)
-- `notion.candidate_profile_id` → Candidate Profile page ID
-- `notion.application_docs_id` → Application Documents parent page ID
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
 ```bash
@@ -99,9 +98,16 @@ Fetch the full row. Extract: job_title, company, location, notes, red_flags, job
 
 Run all three simultaneously:
 
-**A. Candidate Profile (Notion — stays)**
-`notion-fetch` the Candidate Profile page (ID from config `notion.candidate_profile_id`).
-Extract: all populated sections — metrics, achievements, talking points, background keywords, Cover Letter Writing Rules, Writing Tone Profile.
+**A. Candidate Profile**
+Query the `candidate_profile` table:
+```sql
+SELECT experience_summary, fp_and_a_highlights, cost_control_highlights,
+       p2p_highlights, cl_rules, tone_profile, language_notes
+FROM candidate_profile
+WHERE user_email = (SELECT email FROM config -- use user.email from config.json)
+LIMIT 1
+```
+Extract: all populated fields — metrics, achievements, talking points, background keywords, cl_rules, tone_profile.
 
 **B. Full job description**
 If job_url exists and is not a LinkedIn URL:
@@ -118,10 +124,7 @@ If company name is known (not "Not disclosed"):
 
 ## Step 3 — Build the briefing pack
 
-Create a Notion page titled **"[Company] — Interview Brief — [Date]"** under Application Documents
-(parent ID from config `notion.application_docs_id`).
-
-Use `notion-create-pages` then `notion-update-page` to write the content:
+Compose the full brief as a text block:
 
 ```
 # Interview Brief — [Job Title] @ [Company]
@@ -175,21 +178,29 @@ Starter: [your opening line — specific, not generic]
 
 ---
 
-## Step 4 — Update the Supabase job row
+## Step 4 — Save to interview_prep table
 
 ```sql
-UPDATE job_applications
-SET notes = COALESCE(notes,'') || $1
-WHERE id = $2
+INSERT INTO interview_prep (job_application_id, user_profile, company, job_title, content)
+VALUES ($1, $2, $3, $4, $5)
 ```
-Pass `[' | Interview brief: [notion_page_url]', row_id]`.
+Pass `[row_id, user_profile, company, job_title, full_brief_text]`.
+
+Then update the job row notes:
+```sql
+UPDATE job_applications
+SET notes = COALESCE(notes,'') || ' | Interview brief saved ' || CURRENT_DATE::text
+WHERE id = $1
+```
 
 ---
 
 ## Step 5 — Output to user
 
+Display the full brief inline in the conversation, then show:
+
 ```
-Interview brief ready: [Notion page link]
+Interview brief saved to database (interview_prep id: [id]).
 
 [Company] — [Job Title]
 
