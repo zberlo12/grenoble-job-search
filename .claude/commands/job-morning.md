@@ -9,6 +9,7 @@ allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_t
 Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
+- `user.profile_id` → USER_PROFILE
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
 ```bash
@@ -74,7 +75,7 @@ If no rows → set all scan counts to "?" and show:
 **B. Review Queue counts (Supabase):**
 
 ```sql
-SELECT status, count(*)::int AS count FROM review_queue GROUP BY status
+SELECT status, count(*)::int AS count FROM review_queue WHERE user_profile = '<USER_PROFILE>' GROUP BY status
 ```
 
 Extract counts for: `Needs Info` and `To Assess`.
@@ -84,6 +85,7 @@ Extract counts for: `Needs Info` and `To Assess`.
 ```sql
 SELECT status, count(*)::int AS count FROM job_applications
 WHERE status NOT IN ('Dismissed', 'Rejected')
+  AND user_profile = '<USER_PROFILE>'
 GROUP BY status
 ```
 
@@ -95,6 +97,7 @@ Collect counts for: Potentially Apply, To Apply, Docs Ready, Applied, Interview,
 SELECT id, company, job_title, date_applied, date_added, notes, gmail_thread_url
 FROM job_applications
 WHERE status IN ('Applied', 'Interview')
+  AND user_profile = '<USER_PROFILE>'
   AND COALESCE(date_applied, date_added) < CURRENT_DATE - INTERVAL '7 days'
 ```
 

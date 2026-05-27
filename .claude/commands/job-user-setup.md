@@ -71,7 +71,19 @@ Store `existing_pg_module` and `existing_supabase_connection_string` — they wi
   echo "<new_user_name>" > .active-profile
   cp config-<new_user_name>.json config.json
   ```
-  Confirm: "Done — your config is saved. To switch back to the other user, run /job-user-select."
+  Also create `.env.<new_user_name>` (required by `python setup.py --list` and `/job-user-select`) by inheriting the Notion token and config page from the primary user, then substituting this user's name and city:
+  ```bash
+  python -c "
+  import re, pathlib
+  src = pathlib.Path('.env.zack').read_text()
+  token = re.search(r'NOTION_API_TOKEN=(.+)', src).group(1)
+  page  = re.search(r'NOTION_CONFIG_PAGE_ID=(.+)', src).group(1)
+  out = 'NOTION_API_TOKEN=' + token + '\nNOTION_CONFIG_PAGE_ID=' + page + '\nBASE_CITY=<base_city>\nFULL_NAME=<full_name>\n'
+  pathlib.Path('.env.<new_user_name>').write_text(out)
+  print('OK')
+  "
+  ```
+  Confirm: "Done — your config and profile are saved. To switch back to the other user, run /job-user-select."
 
 - **Phase 8** (Gmail): Ask first:
   > "Do you share a Gmail account with the other user on this computer, or do you have your own?

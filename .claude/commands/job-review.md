@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
+- `user.profile_id` → USER_PROFILE
 - `user.salary_floor_apply`, `user.salary_floor_reject` → salary floors
 - `location_zones` → green/yellow/orange/red city lists
 
@@ -72,6 +73,7 @@ SELECT id, job_title, company, source, location, salary, priority, status,
        date_added, job_url, gmail_thread_url, red_flags, missing_info,
        alert_keyword, notes, english
 FROM review_queue
+WHERE user_profile = $1
 ORDER BY
   CASE status WHEN 'Needs Info' THEN 1 ELSE 2 END,
   date_added ASC
@@ -157,8 +159,8 @@ When a row is fully resolved:
 INSERT INTO job_applications
 (job_title, company, source, location, salary, priority, cv_approach, status,
  date_added, job_url, gmail_thread_url, red_flags, missing_info, alert_keyword,
- notes, english, job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+ notes, english, job_description, user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 RETURNING id
 ```
 
@@ -235,6 +237,7 @@ After the queue is fully drained, fetch all `Potentially Apply` rows from the ma
 SELECT id, job_title, company, location, salary, priority, red_flags, notes, job_url, gmail_thread_url, date_added
 FROM job_applications
 WHERE status = 'Potentially Apply'
+  AND user_profile = $1
 ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
 ```
 

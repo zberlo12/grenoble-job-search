@@ -14,7 +14,7 @@ Your role is to assess each listing objectively — do not be agreeable or soft-
 Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
-- `user` → name, base_city, salary_floor_apply, salary_floor_reject, language_preference, contract_preference
+- `user` → name, base_city, salary_floor_apply, salary_floor_reject, language_preference, contract_preference, profile_id (→ USER_PROFILE)
 - `location_zones` → green/yellow/orange/red city lists
 - `background` → functional_expertise, key_systems, notable_employers
 - `lifecycle_rules` → dedup_window_days (30)
@@ -203,12 +203,14 @@ Check both tables for existing entry (last 30 days):
 ```sql
 SELECT id FROM job_applications
 WHERE company ILIKE $1 AND job_title ILIKE $2
+  AND user_profile = $3
   AND date_added >= CURRENT_DATE - 30
 ```
 and:
 ```sql
 SELECT id FROM review_queue
 WHERE company ILIKE $1 AND job_title ILIKE $2
+  AND user_profile = $3
   AND date_added >= CURRENT_DATE - 30
 ```
 Pass `['%company%', '%title_root%']` as params. If found → tell user and skip creation.
@@ -219,8 +221,8 @@ Pass `['%company%', '%title_root%']` as params. If found → tell user and skip 
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
- job_url,red_flags,missing_info,alert_keyword,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+ job_url,red_flags,missing_info,alert_keyword,notes,english,job_description,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
 
@@ -228,8 +230,8 @@ RETURNING id
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,
- date_added,job_url,red_flags,missing_info,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+ date_added,job_url,red_flags,missing_info,notes,english,job_description,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
 

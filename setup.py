@@ -11,6 +11,7 @@ Usage:
 import json
 import sys
 import argparse
+import shutil
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent
@@ -47,6 +48,27 @@ def validate(env: dict, profile_name: str, env_file: Path):
             print(f"   - {k}")
         print(f"\n   Open {env_file.name} and fill in the real values, then re-run.")
         sys.exit(1)
+
+
+def activate_config(profile: str):
+    """Copy config-<profile>.json → config.json so all skills read the right user."""
+    config_json = REPO_ROOT / "config.json"
+    profile_config = REPO_ROOT / f"config-{profile}.json"
+
+    if profile == "zack":
+        if profile_config.exists():
+            shutil.copy2(profile_config, config_json)
+    else:
+        # Back up Zack's config on first switch away from it
+        zack_backup = REPO_ROOT / "config-zack.json"
+        if not zack_backup.exists() and config_json.exists():
+            shutil.copy2(config_json, zack_backup)
+            print(f"OK Backed up Zack's config → config-zack.json")
+
+        if profile_config.exists():
+            shutil.copy2(profile_config, config_json)
+        else:
+            print(f"   Warning: config-{profile}.json not found — config.json unchanged")
 
 
 def generate_mcp_json(env: dict, profile: str):
@@ -106,10 +128,12 @@ def main():
     env = read_env_file(env_file)
     validate(env, profile, env_file)
     generate_mcp_json(env, profile)
+    activate_config(profile)
     ACTIVE_PROFILE_FILE.write_text(profile, encoding="utf-8")
 
     print(f"\nOK Profile activated: {profile}")
     print(f"OK .mcp.json written")
+    print(f"OK config.json updated")
     print(f"OK Notion config page: {env['NOTION_CONFIG_PAGE_ID']}")
     print(f"\n   Start Claude Code and run /job-dashboard to verify.\n")
 

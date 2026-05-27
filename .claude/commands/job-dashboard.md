@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
+- `user.profile_id` → USER_PROFILE
 - `location_zones` → green/yellow/orange/red city lists
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
@@ -72,6 +73,7 @@ SELECT id, job_title, company, location, priority, status, date_added,
        job_url, gmail_thread_url, red_flags, missing_info, notes, salary, source
 FROM review_queue
 WHERE status IN ('Needs Info', 'To Assess')
+  AND user_profile = '<USER_PROFILE>'
 ORDER BY date_added ASC
 ```
 
@@ -81,6 +83,7 @@ SELECT id, job_title, company, location, priority, status, date_added,
        date_applied, job_url, docs_url, gmail_thread_url, red_flags, notes, salary, source
 FROM job_applications
 WHERE status IN ('Potentially Apply', 'To Apply', 'Docs Ready', 'Applied', 'Interview', 'Offer', 'On Hold')
+  AND user_profile = '<USER_PROFILE>'
 ORDER BY status, date_added ASC
 ```
 

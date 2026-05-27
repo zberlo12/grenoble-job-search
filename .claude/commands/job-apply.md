@@ -1,7 +1,7 @@
 ---
-description: Draft a tailored CV and cover letter for a specific job application. Fetches the job row and candidate knowledge base from Supabase, asks targeted questions if anything is missing, then writes tailored CV + cover letter + notes to a Notion page and runs Word populate scripts. Trigger with /job-apply or when Zack is ready to prepare documents for a listing.
+description: Draft a tailored CV and cover letter for a specific job application. Fetches the job row and candidate knowledge base from Supabase, asks targeted questions if anything is missing, then saves CV + cover letter text to Supabase and runs Word populate scripts. Trigger with /job-apply or when the active user is ready to prepare documents for a listing.
 argument-hint: Blank (→ list all "To Apply" rows to pick from), a number from that list, or a company/title search string
-allowed-tools: mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Google_Drive__list_recent_files, mcp__claude_ai_Google_Drive__search_files, mcp__claude_ai_Google_Drive__create_file, Bash
+allowed-tools: mcp__claude_ai_Google_Drive__list_recent_files, mcp__claude_ai_Google_Drive__search_files, mcp__claude_ai_Google_Drive__create_file, Bash
 ---
 
 # Job Apply — Document Drafter

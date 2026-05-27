@@ -1,7 +1,7 @@
 ---
-description: Generate a personalised interview briefing pack for a specific job application. Creates a Notion page with company snapshot, role alignment, likely questions, talking points, and questions to ask them. Trigger with /job-interview-prep or when a listing reaches Interview status.
+description: Generate a personalised interview briefing pack for a specific job application. Fetches job and candidate data from Supabase, researches the company, then stores the briefing in the interview_prep table. Trigger with /job-interview-prep or when a listing reaches Interview status.
 argument-hint: Blank (→ list all Interview rows to pick from), a number from that list, or a company/title search string.
-allowed-tools: mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-update-page, WebFetch, Bash
+allowed-tools: WebFetch, Bash
 ---
 
 # Interview Prep
