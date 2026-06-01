@@ -275,6 +275,81 @@ Include Potentially Apply outcomes in the Step 8 final summary.
 
 ---
 
+## Step 5c — To Apply JD Completeness Gate
+
+**This step is mandatory before showing the To Apply queue.** You cannot draft tailored documents without a job description. Run this check every time the To Apply queue is about to be presented, whether triggered by the user asking to review applications or as part of this skill's natural flow.
+
+```sql
+SELECT id, job_title, company, source, job_url, gmail_thread_url
+FROM job_applications
+WHERE status = 'To Apply'
+  AND user_profile = $1
+  AND (job_description IS NULL OR job_description = '')
+ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
+```
+
+If no rows are missing JDs: skip to Step 5d.
+
+**For each row missing a JD, attempt enrichment in order:**
+
+- **Rung 1 — Indeed URL:** If `job_url` contains `jk=`, call `mcp__claude_ai_Indeed__get_job_details`.
+- **Rung 2 — WebFetch:** If `job_url` exists and is not LinkedIn / null / "Not available", call WebFetch to extract the full JD.
+- **Rung 3 — Gmail thread:** If `gmail_thread_url` is set, call `mcp__claude_ai_Gmail__get_thread`. Only use if the body contains substantive JD content, not just a digest subject line.
+- **Rung 4 — Manual paste:** If all rungs fail, present the row one at a time:
+
+```
+[N/M missing JDs] **[Job Title]** @ [Company]
+🔗 Job URL: [url or "Not available"]
+📧 Gmail: [gmail_thread_url]
+```
+
+> "Paste the full job description so I can draft tailored documents, or type `skip` to leave this one out of the document sprint."
+
+- JD pasted → `UPDATE job_applications SET job_description = $1 WHERE id = $2`
+- `skip` → leave null, continue (row will be flagged "JD needed" in the table)
+
+If enrichment succeeds at any rung, save immediately:
+```sql
+UPDATE job_applications SET job_description = $1 WHERE id = $2 AND user_profile = $3
+```
+
+---
+
+## Step 5d — To Apply Queue Review
+
+After the JD gate, fetch all `To Apply` rows and present as a numbered comparison table with a **My Suggestion** column:
+
+```sql
+SELECT id, job_title, company, location, salary, priority, cv_approach,
+       red_flags, notes, job_url, gmail_thread_url, job_description, date_added
+FROM job_applications
+WHERE status = 'To Apply' AND user_profile = $1
+ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
+```
+
+```
+## To Apply — [N] listings
+
+| # | Title | Company | Zone | Salary | Priority | My Suggestion | Link |
+|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [suggestion + 1-line reason] | [link] or [Gmail] |
+```
+
+**Suggestion rules:**
+- Priority A → **Apply now**
+- Priority B, confirmed salary above floor, CDI → **Apply now**
+- Priority B, salary gap / FTC / location concern → **Apply** with caveat noted
+- Priority C → **Apply** only if user explicitly added it; otherwise **Reconsider**
+- JD missing (skipped in 5c) → **Reconsider — JD needed before drafting**
+- Function scope unclear → **Reconsider — verify JD first**
+
+After presenting the table:
+> "These are my top picks for documents. Tell me which ones you disagree with and I'll adjust — or confirm the list and we'll hand off to `/job-apply` one by one."
+
+For staffing-agency submissions with no cover letter required (Michael Page Interim, LTd, etc.): note "Standard CV only — no CL needed" in the suggestion column.
+
+---
+
 ## Step 6 — Manual Paste Loop (for remaining Group A rows)
 
 For each Group A row that couldn't be auto-enriched, work through one at a time:
