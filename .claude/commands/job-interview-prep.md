@@ -94,6 +94,45 @@ Fetch the full row. Extract: job_title, company, location, notes, red_flags, job
 
 ---
 
+## Step 1b — Check for existing record
+
+After identifying the job row, query:
+```sql
+SELECT id, content, feedback, questions_received, outcome, updated_at
+FROM interview_prep
+WHERE job_application_id = $1
+ORDER BY created_at DESC LIMIT 1
+```
+
+**Three modes:**
+
+**RESUME mode** — row exists, `outcome IS NULL`:
+- Display the existing `content` in full.
+- Show: `"Brief last updated [updated_at]. What do you want to add or change?"`
+- Wait for user input. Apply updates to the existing record (UPSERT in Step 4). Skip Steps 2–3 unless user asks to regenerate.
+
+**ARCHIVE mode** — row exists, `outcome IS NOT NULL`:
+- Condense the record: replace `content` with a lessons-learned summary:
+  ```
+  # Lessons Learned — [Job Title] @ [Company]
+  Outcome: [outcome]  |  Date: [updated_at]
+
+  ## What worked
+  [from feedback field if populated, else infer from content]
+
+  ## Questions actually asked
+  [from questions_received field if populated]
+
+  ## Key takeaways for similar roles
+  [2–3 bullets distilled from the original brief]
+  ```
+- Save the condensed version back to DB.
+- Display it and stop — do not regenerate a full brief for a closed process.
+
+**CREATE mode** — no existing row: proceed to Step 2.
+
+---
+
 ## Step 2 — Gather information in parallel
 
 Run all three simultaneously:
@@ -180,9 +219,13 @@ Starter: [your opening line — specific, not generic]
 
 ## Step 4 — Save to interview_prep table
 
+Use UPSERT so subsequent updates accumulate on the same record rather than creating duplicates:
 ```sql
-INSERT INTO interview_prep (job_application_id, user_profile, company, job_title, content)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO interview_prep (job_application_id, user_profile, company, job_title, content, updated_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
+ON CONFLICT (job_application_id) DO UPDATE
+  SET content = EXCLUDED.content,
+      updated_at = NOW()
 ```
 Pass `[row_id, user_profile, company, job_title, full_brief_text]`.
 
@@ -206,3 +249,22 @@ Interview brief saved to database (interview_prep id: [id]).
 
 Tip: [one context-specific piece of advice based on role type and company]
 ```
+
+---
+
+## Recording an outcome
+
+When the user reports the result of the interview process (offer, rejection, withdrawal, no response after X weeks), update the record:
+
+```sql
+UPDATE interview_prep
+SET outcome = $1,
+    feedback = $2,
+    questions_received = $3,
+    updated_at = NOW()
+WHERE id = $4
+```
+
+Pass `[outcome_text, feedback_text_or_null, questions_jsonb_or_null, record_id]`.
+
+Then trigger ARCHIVE mode (see Step 1b): condense `content` to lessons-learned format and save. The full brief is replaced — it is no longer needed once the process is closed.
