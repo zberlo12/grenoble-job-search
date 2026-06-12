@@ -225,14 +225,14 @@ After Group A and the JD pre-fetch are complete, present all Group B (To Assess)
 ```
 ## To Assess — [N] listings
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | JD | Note | 🔗 |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | ✓ / ⚠ blocked / — | [1-line scan note] | [link](url) or [Gmail](gmail_thread_url) |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | JD | Note | 🔗 Job | 📧 Gmail |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | ✓ / ⚠ blocked / — | [1-line scan note] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
 ```
 
 **JD column:** `✓` = fetched and saved · `⚠ blocked` = LinkedIn or fetch failed · `—` = no URL available
 
-**Link column rule:** Prefer `job_url` as `[link](url)`. If null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
+**Link columns — MANDATORY:** Always render BOTH `🔗 Job` and `📧 Gmail` as separate columns in every table. `🔗 Job` = `[link](job_url)` or `—`. `📧 Gmail` = `[Gmail](gmail_thread_url)` or `—`. Never merge into one column. Never use one as a fallback for the other.
 
 Ask:
 > "Which numbers do you want to **apply to**? List them (e.g. `1,3`) or type `all` / `none`.
@@ -255,9 +255,9 @@ If any Group A rows were pre-filtered as `OPERATIONAL ROLE`, present them in the
 ```
 ## Operational Roles — [N] for review
 
-| # | Title | Company | 📍 Zone | Note | 🔗 |
-|---|---|---|---|---|---|
-| 1 | [title] | [company] | [zone] | Operational role | [link](url) or [Gmail](gmail_thread_url) |
+| # | Title | Company | 📍 Zone | Note | 🔗 Job | 📧 Gmail |
+|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | [zone] | Operational role | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
 ```
 
 Ask the same question — apply / hold / dismiss. Default is dismiss.
@@ -291,12 +291,12 @@ Present as a numbered comparison table:
 ```
 ## Potentially Apply — [N] listings
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | JD | Note | 🔗 |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [B/C] | [flags or —] | ✓ / ⚠ blocked / — | [1-line note] | [link](url) or [Gmail](gmail_thread_url) |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | JD | Note | 🔗 Job | 📧 Gmail |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [B/C] | [flags or —] | ✓ / ⚠ blocked / — | [1-line note] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
 ```
 
-**Link column rule:** Prefer `job_url` as `[link](url)`. If null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
+**Link columns — MANDATORY:** Always render BOTH `🔗 Job` and `📧 Gmail` as separate columns. `🔗 Job` = `[link](job_url)` or `—`. `📧 Gmail` = `[Gmail](gmail_thread_url)` or `—`. Never merge, never fallback, never omit either column.
 
 Ask:
 > "Which numbers do you want to promote to **To Apply**? List them (e.g. `1,3`) or type `all` / `none`.
@@ -373,9 +373,9 @@ ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added AS
 ```
 ## To Apply — [N] listings
 
-| # | Title | Company | Zone | Salary | Priority | My Suggestion | Link |
-|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [suggestion + 1-line reason] | [link] or [Gmail] |
+| # | Title | Company | Zone | Salary | Priority | My Suggestion | 🔗 Job | 📧 Gmail |
+|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [suggestion + 1-line reason] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
 ```
 
 **Suggestion rules:**

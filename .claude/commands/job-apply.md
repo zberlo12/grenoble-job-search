@@ -76,12 +76,12 @@ Present a numbered comparison table:
 ```
 ## To Apply Queue — [N] roles ready for documents
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 |
-|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line decision note] | [link](url) or [Gmail](gmail_thread_url) — never blank |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 Job | 📧 Gmail |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line decision note] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
 ```
 
-**Link column rule:** Always show a link. Prefer `job_url` as `[link](url)`. If `job_url` is null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
+**Link columns — MANDATORY:** Always render BOTH `🔗 Job` and `📧 Gmail` as separate columns. `🔗 Job` = `[link](job_url)` or `—`. `📧 Gmail` = `[Gmail](gmail_thread_url)` or `—`. Never merge, never fallback, never omit either column.
 
 Ask: > "Which numbers do you want to draft documents for? List them (e.g. `1,3`) or type `all`."
 
