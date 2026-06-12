@@ -1,0 +1,230 @@
+{
+  "supabase_url": "https://ginjhaioodmaqfajtinv.supabase.co",
+  "supabase_connection_string": "postgresql://postgres.ginjhaioodmaqfajtinv:oc3Ww2P00Em9PZcG@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
+  "pg_module_path": "C:/Users/zberl/AppData/Roaming/npm/node_modules/@modelcontextprotocol/server-postgres/node_modules/pg",
+  "user": {
+    "name": "Zack",
+    "profile_id": "zberlo",
+    "full_name": "Zachary Berlo",
+    "email": "zberlo12@gmail.com",
+    "base_city": "Grenoble",
+    "country": "France",
+    "target_role": "Finance Director / FP&A",
+    "seniority": "Senior (Finance Director, 12+ years)",
+    "salary_floor_apply": 65000,
+    "salary_floor_reject": 52000,
+    "currency": "EUR",
+    "salary_note": "brut annuel",
+    "contract_preference": "CDI preferred, open to CDD for strong fit",
+    "language_preference": "French + English both fine",
+    "timezone": "Europe/Paris"
+  },
+  "background": {
+    "functional_expertise": [
+      "FP&A",
+      "Financial Planning",
+      "Budgeting",
+      "Forecasting",
+      "Variance Analysis",
+      "Cost Control",
+      "Controlling",
+      "P2P",
+      "AR/AP",
+      "Treasury",
+      "Management Reporting",
+      "Business Partnering",
+      "Process Improvement",
+      "Team Management"
+    ],
+    "key_systems": [
+      "SAP",
+      "SAP Signavio",
+      "SAP Ariba",
+      "Excel",
+      "Power BI",
+      "Coupa",
+      "Concur",
+      "OB10/Tungsten"
+    ],
+    "accounting_standards": [
+      "US GAAP",
+      "French GAAP",
+      "IFRS awareness"
+    ],
+    "notable_employers": [
+      "New England Wire Products",
+      "Schneider Electric"
+    ],
+    "languages": [
+      "French (Professional, DELF pending)",
+      "English (Native)"
+    ]
+  },
+  "location_zones": {
+    "green": {
+      "description": "Commute freely (0-30 min)",
+      "cities": [
+        "Grenoble",
+        "Échirolles",
+        "Meylan",
+        "Saint-Égrève",
+        "Pont-de-Claix",
+        "Montbonnot",
+        "Crolles",
+        "Voreppe",
+        "Bernin",
+        "Saint-Martin-d Hères"
+      ],
+      "departments": [
+        "38"
+      ]
+    },
+    "yellow": {
+      "description": "Hybrid preferred (30-50 min)",
+      "cities": [
+        "Voiron",
+        "Moirans",
+        "Chambéry",
+        "Pontcharra"
+      ],
+      "departments": [
+        "38 (périphérie)",
+        "73 (zone Chambéry)"
+      ]
+    },
+    "orange": {
+      "description": "Remote essential (1h-1h45)",
+      "cities": [
+        "Valence",
+        "Annecy",
+        "Albertville",
+        "Lyon"
+      ],
+      "departments": [
+        "26",
+        "74",
+        "73",
+        "69"
+      ]
+    },
+    "red": {
+      "description": "Skip",
+      "cities": [
+        "Paris",
+        "Nanterre"
+      ],
+      "departments": [
+        "75",
+        "92"
+      ]
+    }
+  },
+  "job_titles": {
+    "french": [
+      "Directeur Financier",
+      "DAF",
+      "RAF",
+      "Directeur Administratif et Financier",
+      "Responsable Administratif et Financier",
+      "Contrôleur de Gestion",
+      "Contrôleur Financier",
+      "Responsable FP&A",
+      "Analyste FP&A",
+      "Responsable Consolidation",
+      "Chef Comptable",
+      "Directeur Comptable",
+      "Responsable Comptabilité",
+      "Responsable Trésorerie",
+      "Responsable P2P",
+      "Responsable Achats Finance",
+      "Responsable Processus Finance",
+      "Responsable Amélioration Continue Finance",
+      "Head of Finance",
+      "Finance Business Partner",
+      "Finance Manager",
+      "Directeur Contrôle de Gestion"
+    ],
+    "english": [
+      "Finance Director",
+      "CFO",
+      "Head of Finance",
+      "FP&A Director",
+      "FP&A Manager",
+      "Financial Controller",
+      "Group Controller",
+      "Finance Manager",
+      "Finance Business Partner",
+      "VP Finance",
+      "Cost Controller",
+      "P2P Manager"
+    ]
+  },
+  "gmail": {
+    "alert_sources": [
+      "jobalert@indeed.com",
+      "jobalert.indeed.com",
+      "linkedin.com",
+      "alertes.cadremploi.fr",
+      "offres@diffusion.apec.fr",
+      "alerte@hellowork.com",
+      "noreply@monster.fr"
+    ],
+    "label": "jobs",
+    "lookback_days": 1
+  },
+  "puppeteer": {
+    "edge_exe": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "edge_data": "C:/Users/zberl/AppData/Local/Microsoft/Edge/User Data",
+    "html_only_sources": [
+      "alertes.cadremploi.fr",
+      "alerte@hellowork.com"
+    ]
+  },
+  "cv_approaches": [
+    {
+      "id": "fpa-fr",
+      "name": "FP&A Focus",
+      "flag": "fpa-fr",
+      "description": "FP&A and financial planning roles, French JD"
+    },
+    {
+      "id": "fpa-en",
+      "name": "FP&A Focus",
+      "flag": "fpa-en",
+      "description": "FP&A and financial planning roles, English JD"
+    },
+    {
+      "id": "costcontrol-fr",
+      "name": "Cost Control Focus",
+      "flag": "costcontrol-fr",
+      "description": "Cost control, controlling roles, French JD"
+    },
+    {
+      "id": "raf-fr",
+      "name": "Standard / RAF",
+      "flag": "raf-fr",
+      "description": "RAF / DAF generalist roles, French JD"
+    },
+    {
+      "id": "hof-en",
+      "name": "Transformation Focus",
+      "flag": "hof-en",
+      "description": "Transformation / Head of Finance, English JD"
+    }
+  ],
+  "lifecycle_rules": {
+    "dedup_window_days": 30,
+    "auto_expiry_days": 60,
+    "salary_floor_apply": 65000,
+    "priority_a": "DAF/RAF/FP&A, Grenoble/Isère, CDI, ≥€65K brut",
+    "priority_b": "Good fit on 3/4 criteria or strong company with one caveat",
+    "priority_c": "Multiple mismatches or one hard eliminator",
+    "skip": "Paris présentiel, clearly junior, salary <€52K, no finance link"
+  },
+  "notion": {
+    "candidate_profile_id": null,
+    "cv_templates_id": null,
+    "application_docs_id": null,
+    "daily_scans_archive": null
+  }
+}

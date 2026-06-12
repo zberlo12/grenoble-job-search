@@ -22,7 +22,7 @@ If the user replies anything other than yes / y / oui, stop immediately without 
 
 ## Step 0 — Load Config
 
-Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL, `user.profile_id` → USER_PROFILE.
+Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL, `user.profile_id` → USER_PROFILE, `puppeteer.html_only_sources` → HTML_ONLY_SOURCES (array of sender domain strings, e.g. `["alertes.cadremploi.fr","alerte@hellowork.com"]`).
 
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
@@ -76,14 +76,22 @@ Pass `[threadId, parseDate, USER_PROFILE]`. If row returned → skip thread (cou
 - `alert_keyword` from subject; `raw_snippet` from search snippet; `raw_body` = subject + ' | ' + snippet (truncated to 500 chars)
 - `gmail_thread_url` = `https://mail.google.com/mail/u/0/#all/<threadId>`
 
-**Cadremploi** (`from:alertes.cadremploi.fr`): Call `get_thread` with `messageFormat=FULL_CONTENT`.
+**Known HTML-only sources** (check BEFORE calling `get_thread`): If the sender domain matches any entry in `HTML_ONLY_SOURCES` (from config), skip `get_thread` entirely. INSERT immediately:
+- `parse_status='puppeteer_pending'`
+- `parse_notes='Known HTML-only source — queued for Puppeteer extraction'`
+- `raw_body` = subject + ' | ' + snippet (≤500 chars)
+- `job_title`, `company`, `location`, `salary` = null (will be extracted by Puppeteer + Claude parse)
+
+This applies to Cadremploi (`alertes.cadremploi.fr`) and HelloWork (`alerte@hellowork.com`) by default.
+
+**Cadremploi** (`from:alertes.cadremploi.fr`): If NOT in HTML_ONLY_SOURCES (first-time setup), call `get_thread` with `messageFormat=FULL_CONTENT`.
 
 > **Important — known MCP limitation:** `get_thread` does NOT return body content for HTML-only emails. `plaintextBody` will be absent for all Cadremploi alerts. Do not waste retries. The snippet is the only text available.
 
 - Has `plaintextBody` (non-empty) → use as body text → parse as standard (see below)
 - No `plaintextBody` → evaluate snippet only:
   - Snippet contains a specific job title AND (company name OR location) AND does NOT end in `...` within the first 120 chars → INSERT `parse_status='pending'`, `parse_notes='Cadremploi snippet-parsed'`
-  - Otherwise → INSERT `parse_status='manual_check'`, `parse_notes='Cadremploi HTML-only — open Gmail link to review and paste JD'`
+  - Otherwise → INSERT `parse_status='puppeteer_pending'`, `parse_notes='Cadremploi HTML-only — queued for Puppeteer extraction'`
 - `raw_body` = subject + ' | ' + snippet (truncated to 500 chars)
 
 **All others (Indeed, LinkedIn, Direct/HelloWork):**
@@ -107,7 +115,7 @@ Try these patterns on the subject in order:
 
 If a title is extracted: INSERT `parse_status='pending'`, `parse_notes='Subject-parsed (HTML-only body — verify location/salary)'`, mark with low confidence (see multi-listing rules below — treat as score=2).
 
-If subject gives no useful info: INSERT `parse_status='manual_check'`, `parse_notes='[Source] HTML-only — open Gmail link to review and paste JD'`.
+If subject gives no useful info: INSERT `parse_status='puppeteer_pending'`, `parse_notes='[Source] HTML-only — auto-detected, queued for Puppeteer extraction. Add sender to html_only_sources in config if recurring'`.
 
 In all cases: `raw_body` = subject + ' | ' + snippet (truncated to 500 chars).
 
@@ -184,19 +192,36 @@ Threads found:     [N total from all 3 Gmail searches]
   Processed:        [N new threads]
 
 Listings written to listing_inbox:
-  pending:         [N]  (ready for daily scan)
+  pending:              [N]  (ready for daily scan)
     of which subject-parsed: [N]  (HTML-only body — verify fields in daily scan)
-  url_dedup:       [N]  (same URL seen in last 7 days — skipped)
-  manual_check:    [N]  (APEC: N, Cadremploi: N, HelloWork: N — HTML-only; check sources)
-  errors:          [N]  (if any INSERT failed — list them)
+  puppeteer_pending:    [N]  (HTML-only — run: node daily_puppeteer.js --pass1-only)
+  url_dedup:            [N]  (same URL seen in last 7 days — skipped)
+  manual_check:         [N]  (APEC only — visit apec.fr manually)
+  errors:               [N]  (if any INSERT failed — list them)
+
+[If puppeteer_pending > 0:]
+HTML-only emails queued:
+  Run: node daily_puppeteer.js --pass1-only
+  Then: /job-search-daily-scan (or it runs automatically at 00:01)
+  Sources flagged: Cadremploi, HelloWork (add new sources to html_only_sources in config)
 
 [If manual_check > 0:]
-Manual check required:
+Manual check required (APEC only — emails contain no listing data):
   APEC: [N] alerts — visit https://www.apec.fr/candidat/recherche-emploi.html
-  Cadremploi: [N] alerts — check Gmail threads directly
-  HelloWork/Direct: [N] alerts — open Gmail threads and paste JD in /job-review
 
 [If errors > 0:]
 Failed inserts — investigate:
   - [thread subject] ([threadId]): [error message]
 ```
+
+---
+
+## Step 5 — Puppeteer extraction (local runs only)
+
+If `REMOTE_TRIGGER` environment variable is NOT set (i.e. running locally, not as a nightly cron), run Puppeteer now to convert `puppeteer_pending` rows to `pending` before the daily scan:
+
+```bash
+node daily_puppeteer.js --pass1-only
+```
+
+**Skip this step if running as a remote trigger** (nightly cron at 23:30) — Puppeteer requires local Edge and cannot run in the remote environment. The `puppeteer_pending` rows will remain until the next local run of `/job-search-daily-scan`, which will detect them in Step 0b and extract them automatically.

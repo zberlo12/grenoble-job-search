@@ -54,59 +54,42 @@ This step is **non-blocking** — if career-ops errors or finds 0 new roles, con
 
 ---
 
+## Step 0b — Puppeteer extraction (local runs only)
+
+Check for any HTML-only email rows not yet extracted:
+
+```sql
+SELECT COUNT(*) FROM listing_inbox WHERE parse_status = 'puppeteer_pending' AND user_profile = USER_PROFILE
+```
+
+If count > 0 AND `REMOTE_TRIGGER` env var is NOT set:
+```bash
+node daily_puppeteer.js --pass1-only
+```
+This converts HTML-only email rows to `pending` so Step 3 processes them normally.
+
+If count > 0 AND running as remote trigger: note in final digest: `⚠ [N] HTML-only email(s) need local Puppeteer run — close Edge, run node daily_puppeteer.js, then re-run /job-search-daily-scan`
+
+If count = 0: skip.
+
+---
+
 ## Step 1 — Read listing_inbox
 
-Run two queries in parallel:
+Run one query:
 
-**Query A — Pending rows** (readable listings to analyse):
+**Query A — Pending rows** (readable listings to analyse, including Puppeteer-extracted rows):
 ```sql
 SELECT * FROM listing_inbox
 WHERE parse_status='pending' AND user_profile=USER_PROFILE
 ORDER BY created_at ASC
 ```
 
-**Query B — Manual check rows** (HTML-only, route directly to review_queue):
-```sql
-SELECT * FROM listing_inbox
-WHERE parse_status='manual_check' AND user_profile=USER_PROFILE
-ORDER BY created_at ASC
-```
-
-**If both return 0 rows:** queue is empty — skip to Step 4 and note "Queue empty — nothing to process" in the digest.
+**If 0 rows:** queue is empty — skip to Step 3 and note "Queue empty — nothing to process" in the digest.
 
 ---
 
-## Step 2 — Route manual_check rows to review_queue
-
-For each row from Query B:
-
-**Dedup check:**
-```sql
-SELECT id FROM review_queue
-WHERE gmail_thread_url=$1 AND notes ILIKE '%UNREADABLE%' AND user_profile=$2
-LIMIT 1
-```
-Pass `[row.gmail_thread_url, USER_PROFILE]`. If found → skip (already queued).
-
-**If not queued — INSERT:**
-```sql
-INSERT INTO review_queue
-(job_title,company,source,location,salary,priority,status,date_added,
- job_url,gmail_thread_url,red_flags,missing_info,alert_keyword,notes,english,listing_inbox_id,user_profile)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-RETURNING id
-```
-Values: `job_title`=row.job_title, `company`='Not disclosed', `source`=row.source, `location`=null, `salary`=null, `priority`='B', `status`='Needs Info', `date_added`=row.parse_date, `job_url`=row.job_url, `gmail_thread_url`=row.gmail_thread_url, `red_flags`='[]', `missing_info`='["Full JD"]', `alert_keyword`=row.alert_keyword, `notes`='UNREADABLE: '+row.parse_notes+' — open Gmail link to review and paste JD', `english`=false, `listing_inbox_id`=row.id, `user_profile`=USER_PROFILE.
-
-**After INSERT → mark processed:**
-```sql
-UPDATE listing_inbox SET parse_status='processed' WHERE id=$1 AND user_profile=$2
-```
-Pass `[row.id, USER_PROFILE]`.
-
----
-
-## Step 3 — Analyse pending rows
+## Step 2 — Analyse pending rows
 
 ### 3a — Dedup check (per-row SQL)
 
@@ -264,7 +247,7 @@ ON CONFLICT (scan_date, user_profile) DO UPDATE SET
 ```
 Pass `[today, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count, USER_PROFILE]`.
 
-`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows + manual_check rows routed in Step 2.
+`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows only (manual_check routing via Step 2 removed — HTML-only emails now handled by Puppeteer).
 
 ### 4b — Gmail draft digest
 
@@ -290,7 +273,13 @@ Sources: LinkedIn [N] · Indeed [N] · APEC [N] · Cadremploi [N] · Direct [N]
 
 Needs Info Queue (added today)
   • [title] @ [company] — missing: [fields]  (Gmail: [url])
-  • [title] @ [company] — UNREADABLE: [source]  (Gmail: [url])
+
+[If puppeteer_pending > 0 after Step 0b:]
+⚠ HTML-only emails pending Puppeteer extraction: [N]
+  Run locally: node daily_puppeteer.js --pass1-only, then re-run /job-search-daily-scan
+
+[If manual_check > 0:]
+APEC alerts: [N] — visit https://www.apec.fr/candidat/recherche-emploi.html
 
 [If Priority A rows:]
 Notable

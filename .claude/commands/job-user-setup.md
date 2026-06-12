@@ -348,6 +348,11 @@ const cfg={
     label:'jobs',
     lookback_days:1
   },
+  puppeteer:{
+    edge_exe:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+    edge_data:'C:/Users/<windows_username>/AppData/Local/Microsoft/Edge/User Data',
+    html_only_sources:['alertes.cadremploi.fr','alerte@hellowork.com']
+  },
   cv_approaches:[
     {id:'fpa-fr',name:'FP&A Focus',flag:'fpa-fr',description:'FP&A and financial planning roles, French JD'},
     {id:'fpa-en',name:'FP&A Focus',flag:'fpa-en',description:'FP&A and financial planning roles, English JD'},
@@ -428,6 +433,53 @@ Say:
 > Click 'Next', check 'Apply the label', select or create a label called **jobs**, then save.
 >
 > Let me know when you've done Step 1 and 2, or type 'skip' to do this later."
+
+---
+
+## Phase 8b — Edge Browser Setup (Puppeteer)
+
+The daily scan uses Microsoft Edge to extract content from HTML-only job alert emails that the Gmail MCP cannot read (Cadremploi, HelloWork, LinkedIn digests). This is a one-time setup per device.
+
+Say:
+> "Microsoft Edge is pre-installed on Windows 11 and will be used as a dedicated automation browser — your daily-driver browser is unaffected.
+>
+> **Set it up in three steps:**
+>
+> 1. Open Microsoft Edge
+> 2. Navigate to **https://mail.google.com** — log in as [user.email]
+> 3. Navigate to **https://www.linkedin.com** — log in
+>
+> Optional (for more complete extraction):
+> - https://www.cadremploi.fr (log in)
+> - https://www.hellowork.com (log in)
+>
+> Close Edge when done — your sessions are saved automatically.
+>
+> Let me know when you've finished, or type 'skip' to do this later."
+
+When the user confirms (or skips), continue to Phase 9.
+
+**To verify Edge is working** (can run any time after setup):
+```bash
+node daily_puppeteer.js --pass1-only
+```
+Expected output when nothing is queued: `Pass 1: 0 puppeteer_pending rows — nothing to extract.`
+
+Also update the `puppeteer` section in config.json with the user's actual Edge paths if they differ from the defaults:
+
+```bash
+node -e "
+const fs=require('fs');
+const cfg=JSON.parse(fs.readFileSync('config.json','utf8'));
+cfg.puppeteer={
+  edge_exe:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  edge_data:'C:/Users/<username>/AppData/Local/Microsoft/Edge/User Data',
+  html_only_sources:['alertes.cadremploi.fr','alerte@hellowork.com']
+};
+fs.writeFileSync('config.json',JSON.stringify(cfg,null,2));
+console.log('OK');
+"
+```
 
 ---
 
