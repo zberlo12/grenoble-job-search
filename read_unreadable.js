@@ -6,8 +6,8 @@
 const puppeteer = require('C:/Users/zberl/OneDrive/Documents/Code/Grenoble-job-search/node_modules/puppeteer-core');
 const { Client } = require('C:/Users/zberl/AppData/Roaming/npm/node_modules/@modelcontextprotocol/server-postgres/node_modules/pg');
 
-const CHROME_EXE  = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const CHROME_DATA = 'C:/Users/zberl/AppData/Local/Google/Chrome/User Data';
+const CHROME_EXE  = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+const CHROME_DATA = 'C:/Users/zberl/AppData/Local/Microsoft/Edge/User Data';
 const PG_CONN     = 'postgresql://postgres.ginjhaioodmaqfajtinv:oc3Ww2P00Em9PZcG@aws-0-eu-west-1.pooler.supabase.com:5432/postgres';
 const USER        = 'zberlo';
 
