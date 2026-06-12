@@ -149,9 +149,13 @@ Routing by score:
 
 **URL dedup — before each INSERT:** If `job_url != 'Not available'`, check:
 ```sql
-SELECT id FROM listing_inbox WHERE job_url=$1 AND parse_date >= CURRENT_DATE - 7 AND user_profile=$2 LIMIT 1
+SELECT id FROM (
+  SELECT id FROM listing_inbox WHERE job_url=$1 AND parse_date >= CURRENT_DATE - 7 AND user_profile=$2
+  UNION ALL
+  SELECT id FROM job_applications WHERE job_url=$1 AND user_profile=$2
+) t LIMIT 1
 ```
-Pass `[jobUrl, USER_PROFILE]`. If row returned → skip this listing (count as `url_dedup`). Continue to next listing.
+Pass `[jobUrl, USER_PROFILE]`. If row returned → skip this listing (count as `url_dedup`). Continue to next listing. This catches re-posted roles that were previously dismissed or rejected.
 
 **INSERT:**
 ```sql

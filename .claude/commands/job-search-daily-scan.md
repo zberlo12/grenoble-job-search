@@ -129,7 +129,6 @@ SELECT id FROM (
   SELECT id FROM job_applications
   WHERE company ILIKE $1
     AND job_title ILIKE $2
-    AND status NOT IN ('Dismissed', 'Rejected')
     AND user_profile=$3
   UNION ALL
   SELECT id FROM review_queue
@@ -138,7 +137,7 @@ SELECT id FROM (
     AND user_profile=$3
 ) t LIMIT 1
 ```
-Pass `['%<company>%', '%<core_role_phrase>%', USER_PROFILE]`. If any row returned → duplicate (same company, same role family, re-post from different source). Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
+Pass `['%<company>%', '%<core_role_phrase>%', USER_PROFILE]`. If any row returned → duplicate (same company, same role family, re-post from different source — includes Dismissed/Rejected entries). Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
 
 If both checks return empty → not a duplicate. Proceed with analysis (Step 3b onward).
 
