@@ -163,6 +163,8 @@ If ALL of the following are true:
 | Rescue gate (Needs Info) | `review_queue` | `Needs Info` |
 | Dismissed | `job_applications` | `Dismissed` |
 
+**⚠ MANDATORY BEFORE EVERY INSERT: `listing_inbox_id` MUST equal `row.id` (the integer PK of the listing_inbox row being processed). Never null, never omitted. It is the only trace back to the source email. If you do not have a concrete integer value, stop and fix it before inserting.**
+
 **For review_queue rows:**
 ```sql
 INSERT INTO review_queue
@@ -171,7 +173,7 @@ INSERT INTO review_queue
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 RETURNING id
 ```
-`$18` = USER_PROFILE.
+`$17` = `row.id` (listing_inbox PK — NEVER null). `$18` = USER_PROFILE.
 
 **For job_applications rows:**
 ```sql
@@ -181,7 +183,7 @@ INSERT INTO job_applications
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 RETURNING id
 ```
-`$19` = USER_PROFILE.
+`$18` = `row.id` (listing_inbox PK — NEVER null). `$19` = USER_PROFILE.
 
 Field notes:
 - `date_added` = `row.parse_date` (the email date, not today)
