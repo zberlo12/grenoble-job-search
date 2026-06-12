@@ -279,6 +279,7 @@ Save `cv_text` and `cl_text` directly to the job row. No Notion page needed.
 - Plain text, line-break separated
 - First line = CV headline (used as `{{CV_HEADLINE}}` in Word)
 - First line over 100 chars = profile summary (used as `{{PROFILE_SUMMARY}}`)
+- **Always write the profile summary in French**, regardless of JD language — it appears on a French CV reviewed by French HR. English JD roles still use a French profile paragraph.
 
 **cl_text format:**
 - Body paragraphs only — no salutation, no sign-off, no "Madame/Monsieur", no "Cordialement"

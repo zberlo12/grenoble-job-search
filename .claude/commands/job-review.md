@@ -60,6 +60,22 @@ UNION queries: run two separate GETs and treat as found if either returns result
 
 ---
 
+## Step 0b — Puppeteer Pre-flight
+
+Before loading the queue, check for HTML-only emails waiting for extraction:
+
+```sql
+SELECT COUNT(*) as n FROM listing_inbox
+WHERE parse_status = 'puppeteer_pending' AND user_profile = $1
+```
+
+- If `n > 0`: run `node daily_puppeteer.js --pass1-only`. Print: `⚙️ Puppeteer: [n] rows extracted.`
+- If `n = 0`: continue.
+
+> **UNREADABLE rows in review_queue** are legacy (pre-Puppeteer). They fall through to the manual-paste loop (Step 6) and cannot be auto-enriched.
+
+---
+
 You are helping drain the Review Queue — a staging table holding listings the daily scan flagged as either:
 - **Needs Info** — plausible matches where salary, hybrid policy, full scope, or company name was missing
 - **To Assess** — fully ranked listings (B/C priority) awaiting confirmation before entering the main pipeline
