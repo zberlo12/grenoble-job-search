@@ -199,17 +199,38 @@ Do not leave any row in the review_queue with a "resolved" marker. Either it's d
 
 ---
 
+## Step 4c — Silent JD Pre-fetch (Group B)
+
+Run immediately after Group A, before presenting any confirmation table. **Do not pause or ask the user anything.**
+
+For each Group B row, attempt JD fetch using the same rung ladder as Step 2:
+- **Rung 1:** `job_url` contains `jk=` → `mcp__claude_ai_Indeed__get_job_details`
+- **Rung 2:** `job_url` exists, not LinkedIn, not null/"Not available" → WebFetch
+- **Rung 3:** `gmail_thread_url` set → `mcp__claude_ai_Gmail__get_thread` (only if substantive JD content, not a digest subject line)
+- **Rung 4:** LinkedIn or all rungs fail → mark as `jd_blocked`
+
+On success, save immediately:
+```sql
+UPDATE review_queue SET job_description = $1 WHERE id = $2
+```
+
+Print one summary line before the table: `JD pre-fetch: [N] fetched · [M] blocked (LinkedIn/404) · [P] no URL`
+
+---
+
 ## Step 5 — Group B: To Assess Confirmation Pass
 
-After Group A is fully processed, present all Group B (To Assess) rows as a numbered comparison table:
+After Group A and the JD pre-fetch are complete, present all Group B (To Assess) rows as a numbered comparison table:
 
 ```
 ## To Assess — [N] listings
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note | 🔗 |
-|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | [1-line scan note] | [link](url) or [Gmail](gmail_thread_url) |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | JD | Note | 🔗 |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [flags or —] | ✓ / ⚠ blocked / — | [1-line scan note] | [link](url) or [Gmail](gmail_thread_url) |
 ```
+
+**JD column:** `✓` = fetched and saved · `⚠ blocked` = LinkedIn or fetch failed · `—` = no URL available
 
 **Link column rule:** Prefer `job_url` as `[link](url)`. If null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
 
@@ -250,7 +271,7 @@ If no pre-filtered operational rows: skip this section.
 After the queue is fully drained, fetch all `Potentially Apply` rows from the main pipeline for a final go/no-go pass — this replaces the need for a separate `/job-review-weekly` skill.
 
 ```sql
-SELECT id, job_title, company, location, salary, priority, red_flags, notes, job_url, gmail_thread_url, date_added
+SELECT id, job_title, company, location, salary, priority, red_flags, notes, job_url, gmail_thread_url, date_added, job_description
 FROM job_applications
 WHERE status = 'Potentially Apply'
   AND user_profile = $1
@@ -259,14 +280,20 @@ ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added AS
 
 If no rows: skip this step.
 
+**Silent JD pre-fetch** — before presenting the table, loop through all rows where `job_description IS NULL OR job_description = ''` and attempt Rung 1–3 (same ladder as Step 4c). Save on success:
+```sql
+UPDATE job_applications SET job_description = $1 WHERE id = $2 AND user_profile = $3
+```
+Print one line: `JD pre-fetch: [N] fetched · [M] blocked · [P] no URL`
+
 Present as a numbered comparison table:
 
 ```
 ## Potentially Apply — [N] listings
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Note | 🔗 |
-|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [B/C] | [flags or —] | [1-line note] | [link](url) or [Gmail](gmail_thread_url) |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | JD | Note | 🔗 |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [B/C] | [flags or —] | ✓ / ⚠ blocked / — | [1-line note] | [link](url) or [Gmail](gmail_thread_url) |
 ```
 
 **Link column rule:** Prefer `job_url` as `[link](url)`. If null or "Not available", fall back to `[Gmail](gmail_thread_url)`. Only show `—` if both are null.
