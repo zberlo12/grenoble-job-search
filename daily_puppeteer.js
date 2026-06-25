@@ -11,6 +11,7 @@
 const puppeteer = require('C:/Users/zberl/OneDrive/Documents/Code/Grenoble-job-search/node_modules/puppeteer-core');
 const { Client } = require('C:/Users/zberl/AppData/Roaming/npm/node_modules/@modelcontextprotocol/server-postgres/node_modules/pg');
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 const cfg       = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
 const EDGE_EXE  = cfg.puppeteer.edge_exe;
@@ -66,9 +67,17 @@ async function extractUrl(page, url) {
   return page.evaluate(() => document.body.innerText.trim());
 }
 
+function killEdge() {
+  try { execSync('taskkill /f /im msedge.exe', { stdio: 'ignore' }); } catch (_) {}
+}
+
 async function run() {
   const db = new Client({ connectionString: PG_CONN });
   await db.connect();
+
+  console.log('Closing Edge before launch...');
+  killEdge();
+  await new Promise(r => setTimeout(r, 1500));
 
   const browser = await puppeteer.launch({
     executablePath: EDGE_EXE,
@@ -78,6 +87,28 @@ async function run() {
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 900 });
+
+  // Warm up Gmail session before processing rows — avoids nav timeouts on cold start
+  if (runPass1) {
+    console.log('Warming up Gmail session...');
+    try {
+      await page.goto('https://mail.google.com', { waitUntil: 'networkidle2', timeout: 60000 });
+      await new Promise(r => setTimeout(r, 3000));
+      const url = page.url();
+      if (url.includes('accounts.google.com') || url.includes('signin')) {
+        console.error('ERROR: Gmail session not active — please open Edge, log into Gmail, then re-run.');
+        await browser.close();
+        await db.end();
+        process.exit(1);
+      }
+      console.log('Gmail session OK.\n');
+    } catch (e) {
+      console.error('ERROR: Could not reach Gmail —', e.message);
+      await browser.close();
+      await db.end();
+      process.exit(1);
+    }
+  }
 
   // ── PASS 1: Email body extraction ─────────────────────────────────────────
   if (runPass1) {
