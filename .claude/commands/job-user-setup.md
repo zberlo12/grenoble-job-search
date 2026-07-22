@@ -348,7 +348,7 @@ const cfg={
     label:'jobs',
     lookback_days:1
   },
-  puppeteer:{
+  browser_extraction:{
     edge_exe:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     edge_data:'C:/Users/<windows_username>/AppData/Local/Microsoft/Edge/User Data',
     html_only_sources:['alertes.cadremploi.fr','alerte@hellowork.com']
@@ -453,13 +453,13 @@ When the user confirms (or skips), continue to Phase 9.
 
 **To verify the connector is working** (can run any time after setup): navigate to `https://mail.google.com` via the Chrome connector and confirm `get_page_text` returns the inbox contents rather than a sign-in page. If it returns a sign-in page, the user needs to log into Gmail in that Chrome browser first.
 
-Also update the `puppeteer.html_only_sources` list in config.json if new HTML-only senders are identified (this list is still used to route emails to the extraction step, independent of which browser tool performs it):
+Also update the `browser_extraction.html_only_sources` list in config.json if new HTML-only senders are identified (this list is still used to route emails to the extraction step, independent of which browser tool performs it):
 
 ```bash
 node -e "
 const fs=require('fs');
 const cfg=JSON.parse(fs.readFileSync('config.json','utf8'));
-cfg.puppeteer={
+cfg.browser_extraction={
   edge_exe:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   edge_data:'C:/Users/<username>/AppData/Local/Microsoft/Edge/User Data',
   html_only_sources:['alertes.cadremploi.fr','alerte@hellowork.com']

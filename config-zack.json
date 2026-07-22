@@ -172,7 +172,7 @@
     "label": "jobs",
     "lookback_days": 1
   },
-  "puppeteer": {
+  "browser_extraction": {
     "edge_exe": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
     "edge_data": "C:/Users/zberl/AppData/Local/Microsoft/Edge/User Data",
     "html_only_sources": [

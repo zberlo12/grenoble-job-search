@@ -22,7 +22,7 @@ If the user replies anything other than yes / y / oui, stop immediately without 
 
 ## Step 0 — Load Config
 
-Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL, `user.profile_id` → USER_PROFILE, `puppeteer.html_only_sources` → HTML_ONLY_SOURCES (array of sender domain strings, e.g. `["alertes.cadremploi.fr","alerte@hellowork.com"]`).
+Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `gmail.label` → GMAIL_LABEL, `user.profile_id` → USER_PROFILE, `browser_extraction.html_only_sources` → HTML_ONLY_SOURCES (array of sender domain strings, e.g. `["alertes.cadremploi.fr","alerte@hellowork.com"]`).
 
 ```bash
 PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
