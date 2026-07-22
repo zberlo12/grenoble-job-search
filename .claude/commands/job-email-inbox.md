@@ -78,9 +78,9 @@ Pass `[threadId, parseDate, USER_PROFILE]`. If row returned → skip thread (cou
 
 **Known HTML-only sources** (check BEFORE calling `get_thread`): If the sender domain matches any entry in `HTML_ONLY_SOURCES` (from config), skip `get_thread` entirely. INSERT immediately:
 - `parse_status='puppeteer_pending'`
-- `parse_notes='Known HTML-only source — queued for Puppeteer extraction'`
+- `parse_notes='Known HTML-only source — queued for Chrome extraction'`
 - `raw_body` = subject + ' | ' + snippet (≤500 chars)
-- `job_title`, `company`, `location`, `salary` = null (will be extracted by Puppeteer + Claude parse)
+- `job_title`, `company`, `location`, `salary` = null (will be extracted via Chrome + Claude parse)
 
 This applies to Cadremploi (`alertes.cadremploi.fr`) and HelloWork (`alerte@hellowork.com`) by default.
 
@@ -91,7 +91,7 @@ This applies to Cadremploi (`alertes.cadremploi.fr`) and HelloWork (`alerte@hell
 - Has `plaintextBody` (non-empty) → use as body text → parse as standard (see below)
 - No `plaintextBody` → evaluate snippet only:
   - Snippet contains a specific job title AND (company name OR location) AND does NOT end in `...` within the first 120 chars → INSERT `parse_status='pending'`, `parse_notes='Cadremploi snippet-parsed'`
-  - Otherwise → INSERT `parse_status='puppeteer_pending'`, `parse_notes='Cadremploi HTML-only — queued for Puppeteer extraction'`
+  - Otherwise → INSERT `parse_status='puppeteer_pending'`, `parse_notes='Cadremploi HTML-only — queued for Chrome extraction'`
 - `raw_body` = subject + ' | ' + snippet (truncated to 500 chars)
 
 **All others (Indeed, LinkedIn, Direct/HelloWork):**
@@ -115,7 +115,7 @@ Try these patterns on the subject in order:
 
 If a title is extracted: INSERT `parse_status='pending'`, `parse_notes='Subject-parsed (HTML-only body — verify location/salary)'`, mark with low confidence (see multi-listing rules below — treat as score=2).
 
-If subject gives no useful info: INSERT `parse_status='puppeteer_pending'`, `parse_notes='[Source] HTML-only — auto-detected, queued for Puppeteer extraction. Add sender to html_only_sources in config if recurring'`.
+If subject gives no useful info: INSERT `parse_status='puppeteer_pending'`, `parse_notes='[Source] HTML-only — auto-detected, queued for Chrome extraction. Add sender to html_only_sources in config if recurring'`.
 
 In all cases: `raw_body` = subject + ' | ' + snippet (truncated to 500 chars).
 
@@ -194,14 +194,13 @@ Threads found:     [N total from all 3 Gmail searches]
 Listings written to listing_inbox:
   pending:              [N]  (ready for daily scan)
     of which subject-parsed: [N]  (HTML-only body — verify fields in daily scan)
-  puppeteer_pending:    [N]  (HTML-only — run: node daily_puppeteer.js --pass1-only)
+  puppeteer_pending:    [N]  (HTML-only — extracted via Chrome in Step 5, or on next interactive run)
   url_dedup:            [N]  (same URL seen in last 7 days — skipped)
   manual_check:         [N]  (APEC only — visit apec.fr manually)
   errors:               [N]  (if any INSERT failed — list them)
 
-[If puppeteer_pending > 0:]
-HTML-only emails queued:
-  Run: node daily_puppeteer.js --pass1-only
+[If puppeteer_pending > 0 AND running as remote trigger:]
+HTML-only emails queued (extracted automatically via Chrome on next interactive run — Step 5 requires a live session):
   Then: /job-search-daily-scan (or it runs automatically at 00:01)
   Sources flagged: Cadremploi, HelloWork (add new sources to html_only_sources in config)
 
@@ -216,12 +215,17 @@ Failed inserts — investigate:
 
 ---
 
-## Step 5 — Puppeteer extraction (local runs only)
+## Step 5 — Chrome extraction (interactive runs only)
 
-If `REMOTE_TRIGGER` environment variable is NOT set (i.e. running locally, not as a nightly cron), run Puppeteer now to convert `puppeteer_pending` rows to `pending` before the daily scan:
+If `REMOTE_TRIGGER` environment variable is NOT set (i.e. running in a live Claude session, not as a nightly cron), extract the `puppeteer_pending` rows now using the Chrome connector instead of launching Edge/Puppeteer:
 
-```bash
-node daily_puppeteer.js --pass1-only
-```
+For each `puppeteer_pending` row (query `SELECT id, gmail_thread_url, source, alert_keyword FROM listing_inbox WHERE parse_status='puppeteer_pending' AND user_profile=$1`):
 
-**Skip this step if running as a remote trigger** (nightly cron at 23:30) — Puppeteer requires local Edge and cannot run in the remote environment. The `puppeteer_pending` rows will remain until the next local run of `/job-search-daily-scan`, which will detect them in Step 0b and extract them automatically.
+1. `navigate` to `gmail_thread_url` in the Chrome tab, `wait` ~2s for render.
+2. `get_page_text` to capture the rendered email body (this reads the logged-in Gmail session directly — no HTML parsing, no token-limit truncation on these digest emails).
+3. If the body is ≥200 chars: `UPDATE listing_inbox SET raw_body=$1, parse_status='pending', parse_notes='Chrome-extracted — ready for Claude parse' WHERE id=$2 AND user_profile=$3`.
+4. If empty/too short: `UPDATE listing_inbox SET parse_status='manual_check', parse_notes='Chrome extraction failed — open Gmail link manually' WHERE id=$2 AND user_profile=$3`.
+
+Batch multiple rows in one `browser_batch` call (navigate → wait → get_page_text, repeated) rather than one tool round-trip per row.
+
+**Skip this step if running as a remote trigger** (nightly cron at 23:30) — the Chrome connector, like Puppeteer before it, requires a live interactive session and cannot run unattended in the remote environment. The `puppeteer_pending` rows will remain until the next local/interactive run of `/job-search-daily-scan`, which will detect them in Step 0b and extract them automatically.
