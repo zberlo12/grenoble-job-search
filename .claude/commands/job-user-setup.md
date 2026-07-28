@@ -348,7 +348,7 @@ const cfg={
     label:'jobs',
     lookback_days:1
   },
-  puppeteer:{
+  browser_extraction:{
     edge_exe:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     edge_data:'C:/Users/<windows_username>/AppData/Local/Microsoft/Edge/User Data',
     html_only_sources:['alertes.cadremploi.fr','alerte@hellowork.com']
@@ -443,42 +443,30 @@ Say:
 
 ---
 
-## Phase 8b — Edge Browser Setup (Puppeteer)
+## Phase 8b — Chrome Connector Setup
 
-The daily scan uses Microsoft Edge to extract content from HTML-only job alert emails that the Gmail MCP cannot read (Cadremploi, HelloWork, LinkedIn digests). This is a one-time setup per device.
+The daily scan uses the Claude in Chrome connector to extract content from HTML-only job alert emails that the Gmail MCP cannot read (Cadremploi, HelloWork, LinkedIn digests), riding your own logged-in Chrome session — no separate automation browser needed. This is a one-time setup per device.
 
 Say:
-> "Microsoft Edge is pre-installed on Windows 11 and will be used as a dedicated automation browser — your daily-driver browser is unaffected.
+> "This system uses the Claude in Chrome browser extension to read job listings and alert emails directly. Set it up in three steps:
 >
-> **Set it up in three steps:**
->
-> 1. Open Microsoft Edge
-> 2. Navigate to **https://mail.google.com** — log in as [user.email]
-> 3. Navigate to **https://www.linkedin.com** — log in
->
-> Optional (for more complete extraction):
-> - https://www.cadremploi.fr (log in)
-> - https://www.hellowork.com (log in)
->
-> Close Edge when done — your sessions are saved automatically.
+> 1. Install/enable the **Claude in Chrome** extension if you haven't already, and make sure you're logged into Gmail as [user.email] and into LinkedIn in that same Chrome browser.
+> 2. Open the extension's site-permissions settings and allow access to: **mail.google.com**, **linkedin.com**, and (optional, for more complete extraction) **cadremploi.fr** and **hellowork.com**.
+> 3. Log into cadremploi.fr / hellowork.com in that browser too if you want those sources fully extracted.
 >
 > Let me know when you've finished, or type 'skip' to do this later."
 
 When the user confirms (or skips), continue to Phase 9.
 
-**To verify Edge is working** (can run any time after setup):
-```bash
-node daily_puppeteer.js --pass1-only
-```
-Expected output when nothing is queued: `Pass 1: 0 puppeteer_pending rows — nothing to extract.`
+**To verify the connector is working** (can run any time after setup): navigate to `https://mail.google.com` via the Chrome connector and confirm `get_page_text` returns the inbox contents rather than a sign-in page. If it returns a sign-in page, the user needs to log into Gmail in that Chrome browser first.
 
-Also update the `puppeteer` section in config.json with the user's actual Edge paths if they differ from the defaults:
+Also update the `browser_extraction.html_only_sources` list in config.json if new HTML-only senders are identified (this list is still used to route emails to the extraction step, independent of which browser tool performs it):
 
 ```bash
 node -e "
 const fs=require('fs');
 const cfg=JSON.parse(fs.readFileSync('config.json','utf8'));
-cfg.puppeteer={
+cfg.browser_extraction={
   edge_exe:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   edge_data:'C:/Users/<username>/AppData/Local/Microsoft/Edge/User Data',
   html_only_sources:['alertes.cadremploi.fr','alerte@hellowork.com']

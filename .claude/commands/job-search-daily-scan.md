@@ -61,7 +61,7 @@ This step is **non-blocking** — if career-ops errors or finds 0 new roles, con
 
 ---
 
-## Step 0b — Puppeteer extraction (local runs only)
+## Step 0b — Chrome extraction (interactive runs only)
 
 Check for any HTML-only email rows not yet extracted:
 
@@ -69,13 +69,9 @@ Check for any HTML-only email rows not yet extracted:
 SELECT COUNT(*) FROM listing_inbox WHERE parse_status = 'puppeteer_pending' AND user_profile = USER_PROFILE
 ```
 
-If count > 0 AND `REMOTE_TRIGGER` env var is NOT set:
-```bash
-node daily_puppeteer.js --pass1-only
-```
-This converts HTML-only email rows to `pending` so Step 3 processes them normally.
+If count > 0 AND `REMOTE_TRIGGER` env var is NOT set: extract each row via the Chrome connector (same procedure as `/job-email-inbox` Step 5 — `navigate` to `gmail_thread_url`, `wait`, `get_page_text`, then `UPDATE listing_inbox SET raw_body=..., parse_status='pending'`). This converts HTML-only email rows to `pending` so Step 3 processes them normally.
 
-If count > 0 AND running as remote trigger: note in final digest: `⚠ [N] HTML-only email(s) need local Puppeteer run — close Edge, run node daily_puppeteer.js, then re-run /job-search-daily-scan`
+If count > 0 AND running as remote trigger: note in final digest: `⚠ [N] HTML-only email(s) need an interactive Chrome run — re-run /job-search-daily-scan from a live session (not remote/cron)`
 
 If count = 0: skip.
 
@@ -85,7 +81,7 @@ If count = 0: skip.
 
 Run one query:
 
-**Query A — Pending rows** (readable listings to analyse, including Puppeteer-extracted rows):
+**Query A — Pending rows** (readable listings to analyse, including Chrome-extracted rows):
 ```sql
 SELECT * FROM listing_inbox
 WHERE parse_status='pending' AND user_profile=USER_PROFILE
@@ -256,7 +252,7 @@ ON CONFLICT (scan_date, user_profile) DO UPDATE SET
 ```
 Pass `[today, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count, USER_PROFILE]`.
 
-`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows only (manual_check routing via Step 2 removed — HTML-only emails now handled by Puppeteer).
+`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows only (manual_check routing via Step 2 removed — HTML-only emails now handled via Chrome).
 
 ### 4b — Gmail draft digest
 
@@ -284,8 +280,8 @@ Needs Info Queue (added today)
   • [title] @ [company] — missing: [fields]  (Gmail: [url])
 
 [If puppeteer_pending > 0 after Step 0b:]
-⚠ HTML-only emails pending Puppeteer extraction: [N]
-  Run locally: node daily_puppeteer.js --pass1-only, then re-run /job-search-daily-scan
+⚠ HTML-only emails pending Chrome extraction: [N]
+  Re-run /job-search-daily-scan from an interactive session (Step 0b will extract them)
 
 [If manual_check > 0:]
 APEC alerts: [N] — visit https://www.apec.fr/candidat/recherche-emploi.html

@@ -67,7 +67,7 @@ UNION queries: run two separate GETs and treat as found if either returns result
 
 ---
 
-## Step 0b — Puppeteer Pre-flight
+## Step 0b — Chrome Pre-flight
 
 Before loading the queue, check for HTML-only emails waiting for extraction:
 
@@ -76,10 +76,10 @@ SELECT COUNT(*) as n FROM listing_inbox
 WHERE parse_status = 'puppeteer_pending' AND user_profile = $1
 ```
 
-- If `n > 0`: run `node daily_puppeteer.js --pass1-only`. Print: `⚙️ Puppeteer: [n] rows extracted.`
+- If `n > 0`: extract each row via the Chrome connector (`navigate` to `gmail_thread_url`, `wait`, `get_page_text`, then `UPDATE listing_inbox SET raw_body=..., parse_status='pending'` — same procedure as `/job-email-inbox` Step 5). Print: `⚙️ Chrome: [n] rows extracted.`
 - If `n = 0`: continue.
 
-> **UNREADABLE rows in review_queue** are legacy (pre-Puppeteer). They fall through to the manual-paste loop (Step 6) and cannot be auto-enriched.
+> **UNREADABLE rows in review_queue** are legacy (pre-Chrome/Puppeteer). They fall through to the manual-paste loop (Step 6) and cannot be auto-enriched.
 
 ---
 
