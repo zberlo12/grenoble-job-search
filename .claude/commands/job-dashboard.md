@@ -27,6 +27,13 @@ c.connect()
 "
 ```
 
+**If the connection fails on the first attempt** (`ECONNRESET`, timeout, or similar) — do not retry the Postgres connection in a loop. Supabase projects on the free tier auto-pause after ~1 week of inactivity, and a paused project produces exactly this symptom: the pooler hostname resolves and accepts TCP, but the connection resets once it tries to route to this project (the project's own `<supabase_url>` subdomain may also stop resolving in DNS while paused). Check fast instead of retrying blindly:
+```bash
+curl -s -m 8 -o /dev/null -w "%{http_code}" "<supabase_url>/rest/v1/"
+```
+- `401` → project is active; the DB failure was transient — retry the Postgres connection once more.
+- Connection error / timeout / no response → project is very likely paused. Stop retrying and tell the user: "The Supabase project looks paused — please resume it at https://supabase.com/dashboard, then I'll continue." Do not attempt DNS workarounds or disable TLS certificate verification to work around this.
+
 **REST API mode (remote triggers):** When `SUPABASE_URL` and `SUPABASE_KEY` are provided via trigger config instead (TCP ports 5432/6543 are blocked in remote environments), skip `cat config.json` and use `curl` for all DB calls:
 
 ```bash

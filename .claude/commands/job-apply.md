@@ -27,6 +27,13 @@ c.connect()
 "
 ```
 
+**If the connection fails on the first attempt** (`ECONNRESET`, timeout, or similar) — do not retry the Postgres connection in a loop. Supabase projects on the free tier auto-pause after ~1 week of inactivity, and a paused project produces exactly this symptom: the pooler hostname resolves and accepts TCP, but the connection resets once it tries to route to this project (the project's own `<supabase_url>` subdomain may also stop resolving in DNS while paused). Check fast instead of retrying blindly:
+```bash
+curl -s -m 8 -o /dev/null -w "%{http_code}" "<supabase_url>/rest/v1/"
+```
+- `401` → project is active; the DB failure was transient — retry the Postgres connection once more.
+- Connection error / timeout / no response → project is very likely paused. Stop retrying and tell the user: "The Supabase project looks paused — please resume it at https://supabase.com/dashboard, then I'll continue." Do not attempt DNS workarounds or disable TLS certificate verification to work around this.
+
 **REST API mode (remote triggers):** When `SUPABASE_URL` and `SUPABASE_KEY` are provided via trigger config instead (TCP ports 5432/6543 are blocked in remote environments), skip `cat config.json` and use `curl` for all DB calls:
 
 ```bash
@@ -122,6 +129,7 @@ Do NOT proceed to Step 1b without a Job Description.
 | 3 | **Contract type** | CDI — not CDD, intérim, alternance, freelance, or stage |
 | 4 | **No duplicate** | No other row for same Company with Status = Applied / Docs Ready / Interview / Offer |
 | 5 | **Role level** | Title/scope is not junior, alternance, or clearly below senior level |
+| 6 | **No rejected/dismissed repost** | No other row for a fuzzy-matched Company with Status = Rejected / Dismissed at a similar Location |
 
 For check 4, run:
 ```sql
@@ -135,8 +143,19 @@ WHERE company ILIKE $1
 `🚫 Duplicate blocked — [Company] already has an active row (id=[id], "[job_title]", status=[status]). Documents cannot be drafted for a second row at the same company. Update or apply via the existing row instead.`
 Then stop. Do not proceed to Step 2.
 
+For check 6, exact-company matching is not enough — the same employer is often logged under slightly different name variants across sources (e.g. "VINCI Energies France CEM" vs "VINCI Energies France Industrie Centre Est Méditerranée"). Extract the distinctive employer word(s) (drop generic suffixes like "France", "Energies", "Group", numbers, legal-entity noise) and match on that root, not the full string:
+```sql
+SELECT id, job_title, status, location, date_applied, notes FROM job_applications
+WHERE company ILIKE $1  -- e.g. '%VINCI%' — the distinctive root word, not the full stored name
+  AND status IN ('Rejected', 'Dismissed')
+  AND id != $2
+```
+If a row is returned, compare its `location` and `job_title` scope against the current row. If they plausibly describe the same underlying position (same city/commute zone, same title family), this is very likely a repost — **not a hard stop**, but surface it prominently before drafting:
+`⚠️ Possible repost of a declined role — [Company variant] rejected you for "[job_title]" (id=[id]) on [date_response/date_applied]: "[notes excerpt]". This new listing looks like the same position. Draft anyway, or mark this row Dismissed instead?`
+Wait for the user's explicit choice before proceeding to Step 2. If the location/scope clearly differ (different city, different role family), note it was checked and continue without asking.
+
 If checks 1, 2, 3, or 5 fail: display summary and ask to confirm override. If confirmed, note it and continue. If not, offer to set Status to Dismissed.
-If all five pass: `✅ Pre-flight passed — proceeding to document build.`
+If all checks pass: `✅ Pre-flight passed — proceeding to document build.`
 
 ---
 
