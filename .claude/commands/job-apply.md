@@ -18,31 +18,71 @@ Run `cat config.json` via Bash and extract `user.name`, `user.email`, `user.sala
 
 Parse `$ARGUMENTS`:
 
-**Blank** → Fetch all rows with `Status = 'To Apply'` from job_applications:
+**Blank** → Run the JD completeness gate below, then present all `Status = 'To Apply'` rows.
+
+**JD completeness gate (mandatory before showing the queue):**
 ```sql
-SELECT id, job_title, company, location, priority, salary, job_url,
-       gmail_thread_url, notes, red_flags, docs_url, cv_approach
+SELECT id, job_title, company, source, job_url, gmail_thread_url
 FROM job_applications
 WHERE status = 'To Apply'
   AND user_profile = '<USER_PROFILE>'
-ORDER BY date_added ASC
+  AND (job_description IS NULL OR job_description = '')
+ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
+```
+If no rows are missing JDs, skip to the table below. Otherwise, for each row missing a JD, attempt enrichment in order:
+- **Rung 1 — Indeed URL:** If `job_url` contains `jk=`, call `mcp__claude_ai_Indeed__get_job_details`.
+- **Rung 2 — WebFetch:** If `job_url` exists and is not LinkedIn / null / "Not available", call WebFetch to extract the full JD.
+- **Rung 3 — Gmail thread:** If `gmail_thread_url` is set, call `mcp__claude_ai_Gmail__get_thread`. Only use if the body contains substantive JD content, not just a digest subject line.
+- **Rung 4 — Manual paste:** If all rungs fail, present the row one at a time:
+```
+[N/M missing JDs] **[Job Title]** @ [Company]
+🔗 Job URL: [url or "Not available"]
+📧 Gmail: [gmail_thread_url]
+```
+> "Paste the full job description so I can draft tailored documents, or type `skip` to leave this one out of the document sprint."
+- JD pasted → `UPDATE job_applications SET job_description = $1 WHERE id = $2`
+- `skip` → leave null, continue (row will be flagged "JD needed" in the table)
+
+If enrichment succeeds at any rung, save immediately:
+```sql
+UPDATE job_applications SET job_description = $1 WHERE id = $2 AND user_profile = $3
 ```
 
-Present a numbered comparison table:
+Then fetch all rows with `Status = 'To Apply'`:
+```sql
+SELECT id, job_title, company, location, priority, salary, job_url,
+       gmail_thread_url, notes, red_flags, docs_url, cv_approach, job_description
+FROM job_applications
+WHERE status = 'To Apply'
+  AND user_profile = '<USER_PROFILE>'
+ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
+```
+
+Present a numbered comparison table with a **My Suggestion** column:
 ```
 ## To Apply Queue — [N] roles ready for documents
 
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | Notes | 🔗 Job | 📧 Gmail |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [flags or —] | [1-line decision note] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
+| # | Title | Company | 📍 Zone | 💰 Salary | Priority | My Suggestion | 🔗 Job | 📧 Gmail |
+|---|---|---|---|---|---|---|---|---|
+| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B] | [suggestion + 1-line reason] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
 ```
+
+**Suggestion rules:**
+- Priority A → **Apply now**
+- Priority B, confirmed salary above floor, CDI → **Apply now**
+- Priority B, salary gap / FTC / location concern → **Apply** with caveat noted
+- Priority C → **Apply** only if user explicitly added it; otherwise **Reconsider**
+- JD missing (skipped above) → **Reconsider — JD needed before drafting**
+- Function scope unclear → **Reconsider — verify JD first**
+
+For staffing-agency submissions with no cover letter required (Michael Page Interim, etc.): note "Standard CV only — no CL needed" in the suggestion column.
 
 **Link columns — MANDATORY:** Always render BOTH `🔗 Job` and `📧 Gmail` as separate columns. `🔗 Job` = `[link](job_url)` or `—`. `📧 Gmail` = `[Gmail](gmail_thread_url)` or `—`. Never merge, never fallback, never omit either column.
 
-Ask: > "Which numbers do you want to draft documents for? List them (e.g. `1,3`) or type `all`."
+Ask: > "These are my top picks for documents. Tell me which ones you disagree with — or list the numbers you want to draft for now (e.g. `1,3`) or type `all`."
 
 Draft documents for each selected row in order. Skip unselected rows.
-If queue is empty: "No roles in To Apply status — run `/job-review-weekly` to promote listings first." and stop.
+If queue is empty: "No roles in To Apply status — run `/job-shortlist` to promote listings first." and stop.
 
 **Number** (e.g. `2`) → use the row at that position.
 **Search string** → `SELECT ... WHERE (job_title ILIKE $1 OR company ILIKE $1) AND status='To Apply' AND user_profile='<USER_PROFILE>'`

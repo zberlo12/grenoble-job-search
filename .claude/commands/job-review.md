@@ -14,21 +14,7 @@ Run `cat config.json` via Bash and extract `user.name`, `user.profile_id` → US
 
 ---
 
-## Step 0b — Chrome Pre-flight
-
-Before loading the queue, check for HTML-only emails waiting for extraction:
-
-```sql
-SELECT COUNT(*) as n FROM listing_inbox
-WHERE parse_status = 'puppeteer_pending' AND user_profile = $1
-```
-
-- If `n > 0`: extract each row via the Chrome connector (`navigate` to `gmail_thread_url`, `wait`, `get_page_text`, then `UPDATE listing_inbox SET raw_body=..., parse_status='pending'` — same procedure as `/job-email-inbox` Step 5). Print: `⚙️ Chrome: [n] rows extracted.`
-- If `n = 0`: continue.
-
-> **UNREADABLE rows in review_queue** are legacy (pre-Chrome/Puppeteer). They fall through to the manual-paste loop (Step 6) and cannot be auto-enriched.
-
----
+> **Chrome extraction of `puppeteer_pending` rows** happens upstream in `/job-email-inbox` (and is checked again in `/job-search-daily-scan` Step 0b) — by the time a row reaches `review_queue`, it has already been through that pipeline. **UNREADABLE rows in review_queue** are legacy (pre-Chrome/Puppeteer) and fall through to the manual-paste loop (Step 6) since they cannot be auto-enriched.
 
 You are helping drain the Review Queue — a staging table holding listings the daily scan flagged as either:
 - **Needs Info** — plausible matches where salary, hybrid policy, full scope, or company name was missing
@@ -235,133 +221,6 @@ If no pre-filtered operational rows: skip this section.
 
 ---
 
-## Step 5b — Potentially Apply Promotion Pass
-
-After the queue is fully drained, fetch all `Potentially Apply` rows from the main pipeline for a final go/no-go pass — this replaces the need for a separate `/job-review-weekly` skill.
-
-```sql
-SELECT id, job_title, company, location, salary, priority, red_flags, notes, job_url, gmail_thread_url, date_added, job_description
-FROM job_applications
-WHERE status = 'Potentially Apply'
-  AND user_profile = $1
-ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
-```
-
-If no rows: skip this step.
-
-**Silent JD pre-fetch** — before presenting the table, loop through all rows where `job_description IS NULL OR job_description = ''` and attempt Rung 1–3 (same ladder as Step 4c). Save on success:
-```sql
-UPDATE job_applications SET job_description = $1 WHERE id = $2 AND user_profile = $3
-```
-Print one line: `JD pre-fetch: [N] fetched · [M] blocked · [P] no URL`
-
-Present as a numbered comparison table:
-
-```
-## Potentially Apply — [N] listings
-
-| # | Title | Company | 📍 Zone | 💰 Salary | Priority | Red Flags | JD | Note | 🔗 Job | 📧 Gmail |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [B/C] | [flags or —] | ✓ / ⚠ blocked / — | [1-line note] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
-```
-
-**Link columns — MANDATORY:** Always render BOTH `🔗 Job` and `📧 Gmail` as separate columns. `🔗 Job` = `[link](job_url)` or `—`. `📧 Gmail` = `[Gmail](gmail_thread_url)` or `—`. Never merge, never fallback, never omit either column.
-
-Ask:
-> "Which numbers do you want to promote to **To Apply**? List them (e.g. `1,3`) or type `all` / `none`.
-> The rest will be **dismissed** unless you add `hold` to leave them in Potentially Apply (e.g. `1,3 hold`)."
-
-Parse response:
-- Numbers → those rows → `status = 'To Apply'`
-- `all` → every row → `status = 'To Apply'`
-- `none` → no rows promoted
-- `hold` suffix (e.g. `1,3 hold`) → unpromoted rows stay `Potentially Apply`
-- Default (no `hold`) → unpromoted rows → `status = 'Dismissed'`
-
-Apply changes:
-- Promote: `UPDATE job_applications SET status='To Apply' WHERE id=$1`
-- Dismiss: `UPDATE job_applications SET status='Dismissed' WHERE id=$1`
-- Hold: no DB write needed
-
-Include Potentially Apply outcomes in the Step 8 final summary.
-
----
-
-## Step 5c — To Apply JD Completeness Gate
-
-**This step is mandatory before showing the To Apply queue.** You cannot draft tailored documents without a job description. Run this check every time the To Apply queue is about to be presented, whether triggered by the user asking to review applications or as part of this skill's natural flow.
-
-```sql
-SELECT id, job_title, company, source, job_url, gmail_thread_url
-FROM job_applications
-WHERE status = 'To Apply'
-  AND user_profile = $1
-  AND (job_description IS NULL OR job_description = '')
-ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
-```
-
-If no rows are missing JDs: skip to Step 5d.
-
-**For each row missing a JD, attempt enrichment in order:**
-
-- **Rung 1 — Indeed URL:** If `job_url` contains `jk=`, call `mcp__claude_ai_Indeed__get_job_details`.
-- **Rung 2 — WebFetch:** If `job_url` exists and is not LinkedIn / null / "Not available", call WebFetch to extract the full JD.
-- **Rung 3 — Gmail thread:** If `gmail_thread_url` is set, call `mcp__claude_ai_Gmail__get_thread`. Only use if the body contains substantive JD content, not just a digest subject line.
-- **Rung 4 — Manual paste:** If all rungs fail, present the row one at a time:
-
-```
-[N/M missing JDs] **[Job Title]** @ [Company]
-🔗 Job URL: [url or "Not available"]
-📧 Gmail: [gmail_thread_url]
-```
-
-> "Paste the full job description so I can draft tailored documents, or type `skip` to leave this one out of the document sprint."
-
-- JD pasted → `UPDATE job_applications SET job_description = $1 WHERE id = $2`
-- `skip` → leave null, continue (row will be flagged "JD needed" in the table)
-
-If enrichment succeeds at any rung, save immediately:
-```sql
-UPDATE job_applications SET job_description = $1 WHERE id = $2 AND user_profile = $3
-```
-
----
-
-## Step 5d — To Apply Queue Review
-
-After the JD gate, fetch all `To Apply` rows and present as a numbered comparison table with a **My Suggestion** column:
-
-```sql
-SELECT id, job_title, company, location, salary, priority, cv_approach,
-       red_flags, notes, job_url, gmail_thread_url, job_description, date_added
-FROM job_applications
-WHERE status = 'To Apply' AND user_profile = $1
-ORDER BY CASE priority WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, date_added ASC
-```
-
-```
-## To Apply — [N] listings
-
-| # | Title | Company | Zone | Salary | Priority | My Suggestion | 🔗 Job | 📧 Gmail |
-|---|---|---|---|---|---|---|---|---|
-| 1 | [title] | [company] | 🟢/🟡/🌐 | [salary or —] | [A/B/C] | [suggestion + 1-line reason] | [link](job_url) or — | [Gmail](gmail_thread_url) or — |
-```
-
-**Suggestion rules:**
-- Priority A → **Apply now**
-- Priority B, confirmed salary above floor, CDI → **Apply now**
-- Priority B, salary gap / FTC / location concern → **Apply** with caveat noted
-- Priority C → **Apply** only if user explicitly added it; otherwise **Reconsider**
-- JD missing (skipped in 5c) → **Reconsider — JD needed before drafting**
-- Function scope unclear → **Reconsider — verify JD first**
-
-After presenting the table:
-> "These are my top picks for documents. Tell me which ones you disagree with and I'll adjust — or confirm the list and we'll hand off to `/job-apply` one by one."
-
-For staffing-agency submissions with no cover letter required (Michael Page Interim, LTd, etc.): note "Standard CV only — no CL needed" in the suggestion column.
-
----
-
 ## Step 6 — Manual Paste Loop (for remaining Group A rows)
 
 For each Group A row that couldn't be auto-enriched, work through one at a time:
@@ -405,11 +264,6 @@ If enriched data reveals a clear disqualifier per `.claude/rules/scoring.md` §4
 **Confirmed:** [N]
 **Left in queue:** [N]
 
-### Potentially Apply Pass
-**Upgraded to `To Apply`:** [N] — [titles or "none"]
-**Dismissed:** [N]
-**Left as `Potentially Apply`:** [N]
-
 ### Outcomes (job_applications)
 **Moved to `To Apply`:** [N] — [titles]
 **Moved to `Potentially Apply`:** [N] — [titles]
@@ -417,6 +271,8 @@ If enriched data reveals a clear disqualifier per `.claude/rules/scoring.md` §4
 
 ### Notable finds
 [Any Priority A promotions worth flagging]
+
+Next: run /job-shortlist to review the Potentially Apply holding queue, or /job-apply to draft documents for To Apply rows.
 ```
 
 ---

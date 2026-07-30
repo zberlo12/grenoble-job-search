@@ -53,7 +53,7 @@ Check for any HTML-only email rows not yet extracted:
 SELECT COUNT(*) FROM listing_inbox WHERE parse_status = 'puppeteer_pending' AND user_profile = USER_PROFILE
 ```
 
-If count > 0 AND `REMOTE_TRIGGER` env var is NOT set: extract each row via the Chrome connector (same procedure as `/job-email-inbox` Step 5 — `navigate` to `gmail_thread_url`, `wait`, `get_page_text`, then `UPDATE listing_inbox SET raw_body=..., parse_status='pending'`). This converts HTML-only email rows to `pending` so Step 3 processes them normally.
+If count > 0 AND `REMOTE_TRIGGER` env var is NOT set: run the exact same Chrome extraction procedure as `/job-email-inbox` Step 5 (the canonical version — do not restate it here). This converts HTML-only email rows to `pending` so Step 3 processes them normally.
 
 If count > 0 AND running as remote trigger: note in final digest: `⚠ [N] HTML-only email(s) need an interactive Chrome run — re-run /job-search-daily-scan from a live session (not remote/cron)`
 
