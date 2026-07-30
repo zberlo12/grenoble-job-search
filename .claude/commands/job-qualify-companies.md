@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `location_zones` → green/yellow/orange/red city lists
+- `user.profile_id` → USER_PROFILE
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
 ```bash
@@ -48,6 +49,7 @@ Parse `$ARGUMENTS`:
 SELECT id, company, sector, location, careers_url, notes
 FROM target_companies
 WHERE tier = 'C'
+  AND user_profile = $1
 ORDER BY company ASC
 ```
 If no rows: "No Tier C companies to qualify — nothing to do." and stop.
@@ -57,8 +59,9 @@ If no rows: "No Tier C companies to qualify — nothing to do." and stop.
 SELECT id, company, tier, sector, location, careers_url, notes
 FROM target_companies
 WHERE company ILIKE $1
+  AND user_profile = $2
 ```
-Pass `['%<company_name>%']`. If not found: offer to qualify anyway without a DB row (research-only output, no save).
+Pass `['%<company_name>%', USER_PROFILE]`. If not found: offer to qualify anyway without a DB row (research-only output, no save).
 
 ---
 

@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user` → name, base_city, salary_floor_apply, language_preference
+- `user.profile_id` → USER_PROFILE
 - `location_zones` → green/yellow/orange/red city lists
 - `lifecycle_rules.dedup_window_days` → 30
 - `job_titles` → french and english title lists (for search groups)
@@ -128,14 +129,16 @@ Collect all results from Steps 2A/2B. Deduplicate across searches first (same jo
 **Check dedup window (last 30 days):**
 ```sql
 SELECT id FROM job_applications
-WHERE (company ILIKE $1 AND job_title ILIKE $2 AND date_added >= CURRENT_DATE - 30)
-   OR (job_url LIKE $3 AND date_added >= CURRENT_DATE - 30)
+WHERE ((company ILIKE $1 AND job_title ILIKE $2 AND date_added >= CURRENT_DATE - 30)
+   OR (job_url LIKE $3 AND date_added >= CURRENT_DATE - 30))
+  AND user_profile = $4
 ```
 Also check review_queue:
 ```sql
 SELECT id FROM review_queue
 WHERE company ILIKE $1 AND job_title ILIKE $2
   AND date_added >= CURRENT_DATE - 30
+  AND user_profile = $3
 ```
 
 If found in either table → discard. If not found → proceed to analysis.
@@ -188,8 +191,8 @@ For each surviving listing:
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
- job_url,red_flags,missing_info,alert_keyword,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+ job_url,red_flags,missing_info,alert_keyword,notes,english,job_description,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
 
@@ -197,13 +200,14 @@ RETURNING id
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,
- date_added,job_url,red_flags,missing_info,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+ date_added,job_url,red_flags,missing_info,notes,english,job_description,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
 
 Field values:
 - `source`: `'Indeed'`
+- `user_profile`: `USER_PROFILE` (final param on both INSERTs)
 - `status`: `'To Assess'` (ranked B/C → **`review_queue`**), `'To Apply'` (A → `job_applications`), `'Dismissed'` (Skip → `job_applications`), `'Needs Info'` (rescue gate → `review_queue`)
 - `red_flags`: `JSON.stringify([...])`, `missing_info`: `JSON.stringify([...])`
 - `english`: boolean `true`/`false`

@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
+- `user.profile_id` → USER_PROFILE
 - `lifecycle_rules.auto_expiry_days` → auto-expiry threshold (default 60)
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
@@ -72,6 +73,7 @@ SELECT id, job_title, company, status, date_added, date_applied, job_url,
        gmail_thread_url, notes
 FROM job_applications
 WHERE status IN ('Docs Ready', 'Applied', 'Interview')
+  AND user_profile = '<USER_PROFILE>'
 ORDER BY
   CASE status WHEN 'Interview' THEN 1 WHEN 'Applied' THEN 2 ELSE 3 END,
   COALESCE(date_applied, date_added) ASC

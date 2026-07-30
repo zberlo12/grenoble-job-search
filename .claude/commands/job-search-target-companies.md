@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user` → name, salary_floor_apply, language_preference
+- `user.profile_id` → USER_PROFILE
 - `location_zones` → green/yellow/orange/red city lists
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
@@ -78,9 +79,10 @@ Parse `$ARGUMENTS`:
 SELECT id, company, tier, sector, location, careers_url, last_checked
 FROM target_companies
 WHERE tier = ANY($1)
+  AND user_profile = $2
 ORDER BY tier ASC, last_checked ASC NULLS FIRST
 ```
-Pass `[['A','B']]` (default) · `[['A']]` · `[['B']]` · `[['C']]` · `[['A','B','C']]` (for `"all"`).
+Pass `[['A','B'], USER_PROFILE]` (default) · `[['A'], USER_PROFILE]` · `[['B'], USER_PROFILE]` · `[['C'], USER_PROFILE]` · `[['A','B','C'], USER_PROFILE]` (for `"all"`).
 
 ---
 
@@ -126,12 +128,14 @@ For each role passing Step 3:
 SELECT id FROM job_applications
 WHERE company ILIKE $1 AND job_title ILIKE $2
   AND date_added >= CURRENT_DATE - 30
+  AND user_profile = $3
 ```
 Also:
 ```sql
 SELECT id FROM review_queue
 WHERE company ILIKE $1 AND job_title ILIKE $2
   AND date_added >= CURRENT_DATE - 30
+  AND user_profile = $3
 ```
 If found in either → skip.
 
@@ -143,8 +147,8 @@ If found in either → skip.
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
- job_url,red_flags,missing_info,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+ job_url,red_flags,missing_info,notes,english,job_description,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 RETURNING id
 ```
 
@@ -152,13 +156,14 @@ RETURNING id
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,
- date_added,job_url,red_flags,missing_info,notes,english,job_description)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+ date_added,job_url,red_flags,missing_info,notes,english,job_description,user_profile)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
 
 Field values:
 - `source`: `'Direct'`
+- `user_profile`: `USER_PROFILE` (final param on both INSERTs)
 - `status`: `'To Assess'` (B/C → **`review_queue`**), `'To Apply'` (A → `job_applications`), `'Dismissed'` (skip → `job_applications`), `'Needs Info'` (rescue gate → `review_queue`)
 - `red_flags`: `JSON.stringify([...])`, `missing_info`: `JSON.stringify([...])`
 - `english`: `true`/`false`

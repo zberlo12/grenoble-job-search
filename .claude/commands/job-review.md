@@ -482,11 +482,11 @@ After the final summary, silently create one FT Log entry:
 
 ```sql
 INSERT INTO france_travail_log
-(action, date, categorie, priorite, statut_declaration, source, notes)
-VALUES ($1, CURRENT_DATE, 'Administratif', 'Optionnel', 'À déclarer', 'Manuel', $2)
+(action, date, categorie, priorite, statut_declaration, source, notes, user_profile)
+VALUES ($1, CURRENT_DATE, 'Administratif', 'Optionnel', 'À déclarer', 'Manuel', $2, $3)
 RETURNING id
 ```
-Pass `['Revue de [total] offres — [X] retenues, [Y] rejetées', 'Revue /job-review : [A] Needs Info + [B] To Assess traités']`.
+Pass `['Revue de [total] offres — [X] retenues, [Y] rejetées', 'Revue /job-review : [A] Needs Info + [B] To Assess traités', USER_PROFILE]`.
 
 Confirm: `📋 FT Log : revue de listings enregistrée (Optionnel — À déclarer).`
 

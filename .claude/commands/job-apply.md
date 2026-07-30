@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.name`, `user.email`, `user.salary_floor_apply` → name, email, salary floor
+- `user.profile_id` → USER_PROFILE
 - `cv_approaches` → CV approach options and flags
 - `notion.application_docs_id` → Application Documents parent page ID
 
@@ -76,6 +77,7 @@ SELECT id, job_title, company, location, priority, salary, job_url,
        gmail_thread_url, notes, red_flags, docs_url, cv_approach
 FROM job_applications
 WHERE status = 'To Apply'
+  AND user_profile = '<USER_PROFILE>'
 ORDER BY date_added ASC
 ```
 
@@ -96,7 +98,7 @@ Draft documents for each selected row in order. Skip unselected rows.
 If queue is empty: "No roles in To Apply status — run `/job-review-weekly` to promote listings first." and stop.
 
 **Number** (e.g. `2`) → use the row at that position.
-**Search string** → `SELECT ... WHERE job_title ILIKE $1 OR company ILIKE $1 AND status='To Apply'`
+**Search string** → `SELECT ... WHERE (job_title ILIKE $1 OR company ILIKE $1) AND status='To Apply' AND user_profile='<USER_PROFILE>'`
 
 After identifying the row, fetch fully:
 ```sql
@@ -137,6 +139,7 @@ SELECT id, job_title, status FROM job_applications
 WHERE company ILIKE $1
   AND status IN ('Applied', 'Docs Ready', 'Interview', 'Offer')
   AND id != $2
+  AND user_profile = $3
 ```
 
 **Check 4 is a hard stop — no override.** If a row is returned, output:
@@ -149,6 +152,7 @@ SELECT id, job_title, status, location, date_applied, notes FROM job_application
 WHERE company ILIKE $1  -- e.g. '%VINCI%' — the distinctive root word, not the full stored name
   AND status IN ('Rejected', 'Dismissed')
   AND id != $2
+  AND user_profile = $3
 ```
 If a row is returned, compare its `location` and `job_title` scope against the current row. If they plausibly describe the same underlying position (same city/commute zone, same title family), this is very likely a repost — **not a hard stop**, but surface it prominently before drafting:
 `⚠️ Possible repost of a declined role — [Company variant] rejected you for "[job_title]" (id=[id]) on [date_response/date_applied]: "[notes excerpt]". This new listing looks like the same position. Draft anyway, or mark this row Dismissed instead?`

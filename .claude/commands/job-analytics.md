@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
+- `user.profile_id` → USER_PROFILE
 - `location_zones` → green/yellow/orange/red city lists
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
@@ -47,17 +48,21 @@ SELECT id, job_title, company, source, location, salary, priority, status,
        date_added, date_applied, date_response, alert_keyword, red_flags, english
 FROM job_applications
 WHERE date_added >= CURRENT_DATE - $1::int
+  AND user_profile = $2
 ORDER BY date_added
 ```
-Pass `[window_days]` as params.
+Pass `[window_days, USER_PROFILE]` as params.
 
 **Query 2 — Pipeline snapshot (active rows only, both tables):**
 ```sql
 SELECT status, count(*)::int AS count FROM job_applications
 WHERE status NOT IN ('Dismissed', 'Rejected')
+  AND user_profile = '<USER_PROFILE>'
 GROUP BY status
 UNION ALL
-SELECT status, count(*)::int AS count FROM review_queue GROUP BY status
+SELECT status, count(*)::int AS count FROM review_queue
+WHERE user_profile = '<USER_PROFILE>'
+GROUP BY status
 ORDER BY status
 ```
 
@@ -68,6 +73,7 @@ SELECT
   ROUND(AVG(date_response - date_applied)) AS avg_days_to_response
 FROM job_applications
 WHERE date_applied IS NOT NULL
+  AND user_profile = '<USER_PROFILE>'
 ```
 
 **Query 4 — Alert performance (window):**
@@ -79,10 +85,11 @@ SELECT
 FROM job_applications
 WHERE date_added >= CURRENT_DATE - $1::int
   AND alert_keyword IS NOT NULL AND alert_keyword != ''
+  AND user_profile = $2
 GROUP BY alert_keyword
 ORDER BY total DESC
 ```
-Pass `[window_days]` as params.
+Pass `[window_days, USER_PROFILE]` as params.
 
 **Query 5 — Dismiss reasons by alert keyword (window):**
 ```sql
@@ -95,10 +102,11 @@ FROM job_applications,
 WHERE date_added >= CURRENT_DATE - $1::int
   AND status = 'Dismissed'
   AND alert_keyword IS NOT NULL AND alert_keyword != ''
+  AND user_profile = $2
 GROUP BY alert_keyword, flag
 ORDER BY alert_keyword, cnt DESC
 ```
-Pass `[window_days]` as params.
+Pass `[window_days, USER_PROFILE]` as params.
 
 ---
 
@@ -115,7 +123,9 @@ For Needs Info counts in the window, also run:
 ```sql
 SELECT COUNT(*)::int AS count FROM review_queue
 WHERE date_added >= CURRENT_DATE - $1::int AND status = 'Needs Info'
+  AND user_profile = $2
 ```
+Pass `[window_days, USER_PROFILE]` as params.
 
 ### Pipeline snapshot (active rows only)
 Use Query 2 results. Count rows in each active status: Needs Info, To Assess (from review_queue) + Potentially Apply, To Apply, Docs Ready, Applied, Interview, Offer, On Hold (from job_applications). Dismissed and Rejected are excluded from this view.

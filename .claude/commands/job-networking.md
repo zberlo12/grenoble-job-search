@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
+- `user.profile_id` → USER_PROFILE
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
 ```bash
@@ -70,6 +71,7 @@ UNION queries: run two separate GETs and treat as found if either returns result
 SELECT id, name, company, role, last_contact, next_followup, notes
 FROM networking_contacts
 WHERE next_followup <= CURRENT_DATE
+  AND user_profile = '<USER_PROFILE>'
 ORDER BY next_followup ASC
 ```
 
@@ -135,8 +137,8 @@ Ask for (one at a time):
 
 ```sql
 INSERT INTO networking_contacts
-(name, company, role, notes, next_followup)
-VALUES ($1, $2, $3, $4, $5)
+(name, company, role, notes, next_followup, user_profile)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id
 ```
 
@@ -151,15 +153,17 @@ Confirm: "Contact added: [Name] @ [Company]."
 SELECT id, name, company, role, last_contact, next_followup, notes
 FROM networking_contacts
 WHERE company ILIKE $1
+  AND user_profile = $2
 ORDER BY last_contact DESC NULLS LAST
 ```
-Pass `['%company_name%']`.
+Pass `['%company_name%', USER_PROFILE]`.
 
 Also query job applications:
 ```sql
 SELECT id, job_title, status, job_url
 FROM job_applications
 WHERE company ILIKE $1 AND status NOT IN ('Dismissed', 'Rejected')
+  AND user_profile = $2
 ORDER BY date_added DESC
 ```
 
@@ -181,6 +185,7 @@ Suggest: "Consider reaching out to [warmest contact] — last spoke [N] days ago
 ```sql
 SELECT id, name, company, role, last_contact, next_followup
 FROM networking_contacts
+WHERE user_profile = '<USER_PROFILE>'
 ORDER BY next_followup ASC NULLS LAST, last_contact DESC NULLS LAST
 ```
 

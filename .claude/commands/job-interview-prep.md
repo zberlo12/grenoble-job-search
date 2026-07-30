@@ -75,6 +75,7 @@ SELECT id, job_title, company, date_applied,
        (CURRENT_DATE - COALESCE(date_applied, date_added))::int AS days_waiting
 FROM job_applications
 WHERE status = 'Interview'
+  AND user_profile = $1
 ORDER BY COALESCE(date_applied, date_added) ASC
 ```
 
@@ -95,6 +96,7 @@ SELECT id, job_title, company, date_applied
 FROM job_applications
 WHERE status = 'Interview'
   AND (job_title ILIKE $1 OR company ILIKE $1)
+  AND user_profile = $2
 ```
 
 Fetch the full row. Extract: job_title, company, location, notes, red_flags, job_url, salary.

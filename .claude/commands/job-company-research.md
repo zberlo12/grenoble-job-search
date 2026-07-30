@@ -12,6 +12,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `supabase_connection_string` → PG_CONN
 - `pg_module_path` → PG_MODULE
 - `user.base_city` → base location
+- `user.profile_id` → USER_PROFILE
 - `background` → functional_expertise (for relevance assessment)
 
 **DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
@@ -78,14 +79,16 @@ Otherwise ask: "Which company would you like to research?"
 SELECT id, company, tier, sector, location, careers_url, last_checked, notes
 FROM target_companies
 WHERE company ILIKE $1
+  AND user_profile = $2
 ```
-Pass `['%company_name%']`. If found: show existing Notes and Last Checked date as context.
+Pass `['%company_name%', USER_PROFILE]`. If found: show existing Notes and Last Checked date as context.
 
 Also check for current listings:
 ```sql
 SELECT job_title, status, date_added, job_url
 FROM job_applications
 WHERE company ILIKE $1 AND status NOT IN ('Dismissed', 'Rejected')
+  AND user_profile = $2
 ORDER BY date_added DESC
 ```
 
@@ -161,8 +164,8 @@ Ask: "Would you like to add [Company] to your Target Companies list? (yes/no)"
 If yes:
 ```sql
 INSERT INTO target_companies
-(company, tier, sector, location, careers_url, last_checked, notes)
-VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)
+(company, tier, sector, location, careers_url, last_checked, notes, user_profile)
+VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6, $7)
 RETURNING id
 ```
 Confirm: "Added [Company] to Target Companies."

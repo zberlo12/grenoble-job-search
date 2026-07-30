@@ -137,6 +137,7 @@ SET status='Dismissed',
 WHERE status='Applied'
   AND date_applied < CURRENT_DATE - INTERVAL '60 days'
   AND COALESCE(notes,'') NOT LIKE '%Auto-expired%'
+  AND user_profile = '<USER_PROFILE>'
 RETURNING id, job_title, company
 ```
 
@@ -144,8 +145,8 @@ RETURNING id, job_title, company
 
 **Human contact detection:** If a response is found and the sender appears to be a named human (not noreply/auto/careers@ address), upsert into `networking_contacts`:
 ```sql
-INSERT INTO networking_contacts (name, company, role, email, last_contact, source, notes)
-VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5)
+INSERT INTO networking_contacts (name, company, role, email, last_contact, source, notes, user_profile)
+VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5, $6)
 ON CONFLICT (email) DO UPDATE SET last_contact=EXCLUDED.last_contact,
   notes=COALESCE(networking_contacts.notes,'')||' | '||EXCLUDED.notes
 RETURNING id

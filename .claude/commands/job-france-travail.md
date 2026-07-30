@@ -17,6 +17,7 @@ Run `cat config.json` via Bash. Parse the output and extract:
 - `pg_module_path` → PG_MODULE
 - `user.name` → name
 - `user.email` → email
+- `user.profile_id` → USER_PROFILE
 - `user.timezone` → TZ (default `Europe/Paris` if absent)
 
 **Timezone rule:** All date filters on `france_travail_log.date` (a UTC timestamp column) must cast to local date before comparing: `(date AT TIME ZONE '<TZ>')::date`. This ensures an entry recorded at 23:00 local time (01:00 UTC next day) is attributed to the correct local date. Apply this pattern everywhere `france_travail_log.date` is filtered by date range. `scan_archive.scan_date` is a plain `date` column — no conversion needed.
@@ -104,6 +105,7 @@ Pull from both source tables and create missing France Travail Log entries.
 SELECT id, job_title, company, status, date_applied, date_added, date_response, notes, job_url
 FROM job_applications
 WHERE status IN ('Docs Ready','Applied','Interview','Offer','Rejected')
+  AND user_profile = '<USER_PROFILE>'
 ORDER BY COALESCE(date_applied, date_added) ASC
 ```
 
@@ -128,6 +130,7 @@ Source: `Auto-Candidatures`. Job URL carried forward from job_applications.
 SELECT id, name, company, role, last_contact, notes
 FROM networking_contacts
 WHERE last_contact IS NOT NULL
+  AND user_profile = '<USER_PROFILE>'
 ORDER BY last_contact DESC
 ```
 
@@ -145,6 +148,7 @@ SELECT id FROM france_travail_log
 WHERE entreprise ILIKE $1
   AND categorie = $2
   AND (date AT TIME ZONE '<TZ>')::date BETWEEN $3::date - INTERVAL '1 day' AND $3::date + INTERVAL '1 day'
+  AND user_profile = $4
 ```
 
 If found → skip. Count skipped entries separately.
@@ -154,13 +158,13 @@ If found → skip. Count skipped entries separately.
 ```sql
 INSERT INTO france_travail_log
 (action, date, categorie, priorite, entreprise, poste_sujet, mode, source,
- statut_declaration, notes, job_application_id, contact_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'À déclarer', $9, $10, $11)
+ statut_declaration, notes, job_application_id, contact_id, user_profile)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'À déclarer', $9, $10, $11, $12)
 RETURNING id
 ```
 
 All new entries default to `statut_declaration = 'À déclarer'`.
-Pass `job_application_id` for candidature entries, `contact_id` for réseau entries, `NULL` otherwise.
+Pass `job_application_id` for candidature entries, `contact_id` for réseau entries, `NULL` otherwise. Final param is `USER_PROFILE`.
 
 ### Monthly standing entries
 
@@ -172,6 +176,7 @@ WHERE categorie = 'Administratif'
   AND source = 'Auto-Mensuel'
   AND (date AT TIME ZONE '<TZ>')::date >= date_trunc('month', CURRENT_DATE)::date
   AND (date AT TIME ZONE '<TZ>')::date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+  AND user_profile = '<USER_PROFILE>'
 ```
 
 If cnt < 2, insert the missing entries:
@@ -179,27 +184,27 @@ If cnt < 2, insert the missing entries:
 ```sql
 -- Entry 1: monthly job search log
 INSERT INTO france_travail_log
-(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes)
+(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes, user_profile)
 VALUES (
   'Suivi mensuel — Recherche d''emploi active',
   date_trunc('month', CURRENT_DATE),
   'Administratif', 'Optionnel',
   'Bilan mensuel de recherche d''emploi',
   'En ligne', 'Auto-Mensuel', 'À déclarer',
-  'Entrée mensuelle automatique'
+  'Entrée mensuelle automatique', '<USER_PROFILE>'
 )
 ON CONFLICT DO NOTHING RETURNING id;
 
 -- Entry 2: monthly follow-up log
 INSERT INTO france_travail_log
-(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes)
+(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes, user_profile)
 VALUES (
   'Suivi mensuel — Relances et suivis de candidatures',
   date_trunc('month', CURRENT_DATE),
   'Administratif', 'Optionnel',
   'Relances et suivis — bilan mensuel',
   'En ligne', 'Auto-Mensuel', 'À déclarer',
-  'Entrée mensuelle automatique'
+  'Entrée mensuelle automatique', '<USER_PROFILE>'
 )
 ON CONFLICT DO NOTHING RETURNING id;
 ```
@@ -268,10 +273,11 @@ INSERT into france_travail_log:
 ```sql
 INSERT INTO france_travail_log
 (action, date, categorie, priorite, entreprise, poste_sujet, mode, source,
- statut_declaration, notes)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'Manuel', $8, $9)
+ statut_declaration, notes, user_profile)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'Manuel', $8, $9, $10)
 RETURNING id
 ```
+Final param is `USER_PROFILE`.
 
 Confirm: "Entry created (id=[id])."
 
@@ -311,6 +317,7 @@ FROM france_travail_log
 WHERE (date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
   AND priorite = ANY($3)           -- ['Obligatoire'] or ['Obligatoire','Impactant'] or all
   AND statut_declaration = ANY($4) -- ['À déclarer'] or ['Déclaré'] or ['À déclarer','Déclaré'] or all
+  AND user_profile = $5
 ORDER BY date ASC
 ```
 
@@ -322,6 +329,7 @@ LEFT JOIN job_applications ja ON ft.job_application_id = ja.id
 WHERE (ft.date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
   AND ft.priorite = ANY($3)
   AND ft.statut_declaration = ANY($4)
+  AND ft.user_profile = $5
 ORDER BY ft.date ASC
 ```
 
@@ -352,6 +360,7 @@ Save answers via UPDATE france_travail_log SET notes = COALESCE(notes,'') || ' F
 SELECT COALESCE(SUM(total_found),0)::int AS total_found
 FROM scan_archive
 WHERE scan_date BETWEEN $1 AND $2
+  AND user_profile = '<USER_PROFILE>'
 ```
 
 ```sql
@@ -366,6 +375,7 @@ FROM france_travail_log
 WHERE categorie = 'Administratif'
   AND action LIKE 'Revue de%'
   AND (date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
+  AND user_profile = '<USER_PROFILE>'
 ```
 
 ```sql
@@ -374,12 +384,14 @@ WHERE categorie = 'Administratif'
 SELECT COUNT(*)::int AS submitted_period
 FROM job_applications
 WHERE date_applied BETWEEN $1 AND $2
+  AND user_profile = '<USER_PROFILE>'
 
 -- Current pipeline snapshot (not date-filtered — these totals include all open rows)
 SELECT
   COUNT(*) FILTER (WHERE status = 'Docs Ready')::int    AS docs_ready,
   COUNT(*) FILTER (WHERE status = 'Potentially Apply')::int AS pot_apply
 FROM job_applications
+WHERE user_profile = '<USER_PROFILE>'
 ```
 
 **Important:** "retained" = moved out of review into pipeline (Potentially Apply or To Apply) at time of triage. It is NOT the same as final applications submitted. The three numbers (submitted this period / docs ready / potentially apply) are the current downstream state across all open pipeline rows — they are not a strict subset of this period's retained count, because sessions process backlog from multiple weeks. Present them as a pipeline snapshot, not a direct breakdown of this week's 18.
@@ -486,11 +498,11 @@ On confirmation:
 If Y, INSERT into france_travail_log:
 ```sql
 INSERT INTO france_travail_log
-(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes)
-VALUES ($1, $2, 'Présélection', 'Optionnel', $3, 'En ligne', 'Auto-Revue', 'À déclarer', $4)
+(action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes, user_profile)
+VALUES ($1, $2, 'Présélection', 'Optionnel', $3, 'En ligne', 'Auto-Revue', 'À déclarer', $4, $5)
 RETURNING id
 ```
-Pass `['Présélection — Revue d\'offres d\'emploi', period_end_date, 'Revue de [X] offres — [Y] retenues, [Z] écartées', commentaire_ft]`.
+Pass `['Présélection — Revue d\'offres d\'emploi', period_end_date, 'Revue de [X] offres — [Y] retenues, [Z] écartées', commentaire_ft, USER_PROFILE]`.
 
 ### Step 2c-iv — Create Gmail draft
 
@@ -666,6 +678,7 @@ SELECT
   COUNT(*) FILTER (WHERE status IN ('Applied','Docs Ready','Interview','Offer','Rejected')
     AND date_applied IS NOT NULL) AS candidatures
 FROM job_applications
+WHERE user_profile = '<USER_PROFILE>'
 GROUP BY week_start
 ORDER BY week_start
 ```

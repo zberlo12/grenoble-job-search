@@ -419,7 +419,7 @@ PG_MODULE="..." PG_CONN="..." node -e "
 const {Client}=require(process.env.PG_MODULE);
 const c=new Client({connectionString:process.env.PG_CONN});
 c.connect()
-  .then(()=>c.query('INSERT INTO target_companies (company,tier,notes) VALUES ($1,$2,$3) RETURNING id',['<company>','B','Added during setup']))
+  .then(()=>c.query('INSERT INTO target_companies (company,tier,notes,user_profile) VALUES ($1,$2,$3,$4) RETURNING id',['<company>','B','Added during setup','<profile_id>']))
   .then(r=>{console.log('id='+r.rows[0].id);return c.end();});
 "
 ```
