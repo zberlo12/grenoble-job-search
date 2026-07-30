@@ -197,6 +197,7 @@ To adapt the system for a different user: run `/job-user-setup` — it walks thr
 | `/job-search` | As needed | Analyse a pasted listing |
 | `/job-search-indeed` | As needed | Manual Indeed sweep (local / remote / both) |
 | `/job-search-target-companies` | Weekly | Check Tier A/B careers pages |
+| `/job-scan-ft` | Nightly (auto, non-blocking) | Fetch structured offers from the France Travail API → `listing_inbox` |
 | `/job-company-research` | As needed | Deep-dive on a specific company |
 | `/job-networking` | As needed | Log contacts, schedule follow-ups |
 | `/job-france-travail` | Monthly | Compliance report |

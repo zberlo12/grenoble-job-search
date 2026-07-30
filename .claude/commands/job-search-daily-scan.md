@@ -77,14 +77,22 @@ If count = 0: skip.
 
 ---
 
+## Step 0c — France Travail API Scan (headless, non-blocking)
+
+Run `/job-scan-ft` to pull structured offers from the France Travail API and stage them in `listing_inbox` with `parse_status='structured'`. Unlike Step 0a/0b, this needs no browser and works identically on remote triggers.
+
+This step is **non-blocking** — if `/job-scan-ft` reports missing credentials/ROME codes or errors, note it in the final digest (e.g. `"France Travail scan: [message]"`) and continue to Step 1 as normal.
+
+---
+
 ## Step 1 — Read listing_inbox
 
 Run one query:
 
-**Query A — Pending rows** (readable listings to analyse, including Chrome-extracted rows):
+**Query A — Pending rows** (readable listings to analyse, including Chrome-extracted and France Travail structured rows — the latter need no text-parsing since the API already returned clean fields, so they go straight into Step 2's scoring):
 ```sql
 SELECT * FROM listing_inbox
-WHERE parse_status='pending' AND user_profile=USER_PROFILE
+WHERE parse_status IN ('pending','structured') AND user_profile=USER_PROFILE
 ORDER BY created_at ASC
 ```
 
