@@ -1,0 +1,141 @@
+Needs Info — Gmail Links for HAL (39 rows)
+Generated: 2026-05-16
+==========================================
+Forward each email to hal9k.ai.agent@gmail.com
+Ask HAL to: open the Gmail link, find the job posting URL, browse it, extract JD + salary + location + hybrid policy
+
+--- QUEUED (named roles — HAL should find the job URL inside the email) ---
+
+ID 179 | Controleur de Gestion Groupe @ CDI Flex'
+Missing: Location, Salary, Hybrid policy
+Gmail: https://mail.google.com/mail/u/0/#all/19e0b8c45cf32467
+
+ID 205 | Chef de Projet ERP IFS H/F @ Kanopé RH
+Missing: Salary, Hybrid policy, Full JD
+Gmail: https://mail.google.com/mail/u/0/#all/19e1ca80dabc8705
+
+ID 206 | Responsable Administratif Comptable et Financier H/F @ Start People
+Missing: Company name, Salary, Hybrid policy, Full JD
+Gmail: https://mail.google.com/mail/u/0/#all/19e1b74f6d01c094
+
+ID 207 | Finance Controller H/F @ Howmet Aerospace
+Missing: Salary, Hybrid policy, Full JD
+Gmail: https://mail.google.com/mail/u/0/#all/19e1c84537a0b576
+
+ID 215 | Contrôleur de Gestion Industriel H/F @ Maison de l'Emploi Voironnais
+Missing: Company name, Salary, Hybrid policy, Full JD
+Gmail: https://mail.google.com/mail/u/0/#all/19e19daf93a2acf8
+
+ID 223 | Finance Controller @ (Not disclosed)
+Missing: Full JD
+Gmail: https://mail.google.com/mail/u/0/#all/19e249055e023516
+
+ID 235 | Contrôleur de Gestion Usine @ Candia
+Missing: Salary, Hybrid policy
+Gmail: https://mail.google.com/mail/u/0/#all/19e25c5999b589d5
+
+ID 240 | Responsable Contrôle de Gestion H/F @ Time recrutement (Chambéry)
+Missing: Company name, Hybrid policy
+Gmail: https://mail.google.com/mail/u/0/#all/19e2d886ce3cea80
+
+ID 241 | Chargé d'Affaires Génie Civil H/F @ Siemens Energy (Grenoble)
+Missing: Salary, Scope — OPERATIONAL ROLE
+Gmail: https://mail.google.com/mail/u/0/#all/19e2cb869eba7700
+
+ID 242 | Chargé d'affaires Travaux CVC H/F @ CDIFLEX (Grenoble)
+Missing: Scope — OPERATIONAL ROLE, salary €30-40k
+Gmail: https://mail.google.com/mail/u/0/#all/19e2cb869eba7700
+
+ID 243 | Chef de Mission Comptable H/F @ Talents Finance
+Missing: Location, Hybrid policy, Salary
+Gmail: https://mail.google.com/mail/u/0/#all/19e2c884a9e26a97
+
+ID 244 | Country Finance Manager @ Deel
+Missing: Location, Salary, Hybrid policy
+Gmail: https://mail.google.com/mail/u/0/#all/19e2be8a59026ef4
+
+ID 245 | Global Production Controller @ Busch Vacuum Solutions
+Missing: Location, Salary, Hybrid policy
+Gmail: https://mail.google.com/mail/u/0/#all/19e2d32387ac914c
+
+ID 246 | Responsable projet chaine d'approvisionnement H/F @ GE Vernova (Grenoble)
+Missing: Salary, Hybrid policy, Scope — OPERATIONAL ROLE
+Gmail: https://mail.google.com/mail/u/0/#all/19e2cc46905fe0a9
+
+ID 247 | Responsable des Operations Logistiques H/F @ Amazon (Grenoble)
+Missing: Salary, Hybrid policy — OPERATIONAL ROLE
+Gmail: https://mail.google.com/mail/u/0/#all/19e2a9f157acce6d
+
+--- UNREADABLE (HTML-only digest emails — HAL needs to open Gmail, click through to each job listing) ---
+
+ID 167 | Cadremploi — Supply Chain, RAF, RAF, Directeur Financier (4 alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e0c46aa64b83c8
+
+ID 168 | Cadremploi — Achats/SC, CDG, Achats/SC, Credit Mgr/Trésorerie, CDG (5 alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e0bc0a903688f9
+
+ID 169 | Cadremploi — Financial Controller / Finance Manager critères modifiés (3 offres)
+Gmail: https://mail.google.com/mail/u/0/#all/19e116ebdc8708f6
+
+ID 170 | Cadremploi — CDG/FP&A, DAF, Credit Mgr/Trésorerie, Achats/SC (6 messages)
+Gmail: https://mail.google.com/mail/u/0/#all/19e111ddf3596b2c
+
+ID 171 | Cadremploi — (unknown alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e17dd9fa4b9dbc
+
+ID 172 | Cadremploi — (unknown alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e169271567ae4a
+
+ID 173 | Cadremploi — (unknown alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e163b0997b9d04
+
+ID 174 | Cadremploi — (unknown alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e153b71659e2b6
+
+ID 175 | APEC — 1 offre
+Gmail: https://mail.google.com/mail/u/0/#all/19e155edf259a9d1
+
+ID 194 | APEC — 11 offres
+Gmail: https://mail.google.com/mail/u/0/#all/19e1afc07c47429b
+
+ID 195 | Cadremploi — (unknown alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e1bb98d867ab0d
+
+ID 196 | Cadremploi — (6 alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e1b4f39f8bece4
+
+ID 197 | APEC — 9 offres
+Gmail: https://mail.google.com/mail/u/0/#all/19e2054a5a72bc46
+
+ID 198 | Cadremploi — (7 alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e2087c813812d9
+
+ID 199 | Cadremploi — RAF, Supply Chain critères modifiés
+Gmail: https://mail.google.com/mail/u/0/#all/19e20e0cc6c098c0
+
+ID 200 | Cadremploi — CDG, CDG Industriel, Pilote Financier (3 alerts)
+Gmail: https://mail.google.com/mail/u/0/#all/19e222a268b64c43
+
+ID 222 | APEC — 9 offres du 14/05/2026
+Gmail: https://mail.google.com/mail/u/0/#all/19e256f6b231f60f
+
+ID 224 | Cadremploi — CDG, CDG/Pilote de flux financier, DAF (3 alertes)
+Gmail: https://mail.google.com/mail/u/0/#all/19e275077ae4afdc
+
+ID 225 | Cadremploi — Credit Manager/Trésorerie, CDG/Pilote, RAF, DAF (4 alertes)
+Gmail: https://mail.google.com/mail/u/0/#all/19e258094fa6abe0
+
+ID 226 | Cadremploi — Financial Controller critères modifiés
+Gmail: https://mail.google.com/mail/u/0/#all/19e2606a33aa268f
+
+ID 236 | Cadremploi — CDG alert
+Gmail: https://mail.google.com/mail/u/0/#all/19e2ae6dd12be62e
+
+ID 237 | Cadremploi — RAF critères modifiés
+Gmail: https://mail.google.com/mail/u/0/#all/19e2b2d8f5acbb93
+
+ID 238 | HelloWork — digest hebdomadaire
+Gmail: https://mail.google.com/mail/u/0/#all/19e2b5258105958e
+
+ID 239 | APEC — 2 offres
+Gmail: https://mail.google.com/mail/u/0/#all/19e29f13fa15d302

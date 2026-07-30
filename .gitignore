@@ -1,5 +1,6 @@
 # User config — contains personal data and connection strings
 config.json
+config-*.json
 
 # Secrets — never commit these
 .env
@@ -7,6 +8,11 @@ config.json
 !.env.template
 *.credentials.json
 .credentials.json
+identifiants*.json
+
+# Local tool state (claude-flow / ruflo) — not part of the project
+.swarm/
+ruvector.db
 
 # MCP config contains API tokens — commit only the template version
 .mcp.json

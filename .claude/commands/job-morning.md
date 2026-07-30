@@ -110,5 +110,5 @@ If no scan_archive row was found, show the ⚠️ warning in the LAST NIGHT'S SC
 The suggested next step should be the single most impactful action:
 - Review Queue total > 0 → `/job-review` (takes priority over everything else)
 - To Apply > 0 → `/job-apply`
-- Potentially Apply > 3 → `/job-review-weekly` (holding queue getting full)
+- Potentially Apply > 3 → `/job-shortlist` (holding queue getting full)
 - Otherwise → "Pipeline clean — focus on applications in progress"

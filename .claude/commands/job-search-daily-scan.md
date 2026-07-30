@@ -38,7 +38,7 @@ cd ../career-ops-analysis && node scan.mjs 2>&1 | tail -10
 Then import any new pipeline.md entries:
 
 ```bash
-PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node portal_scan_import.js
+node portal_scan_import.js
 ```
 
 This step is **non-blocking** — if career-ops errors or finds 0 new roles, continue to Step 1 as normal. Note the result (e.g. "career-ops: 2 new roles imported" or "career-ops: 0 new roles") in the final digest.
