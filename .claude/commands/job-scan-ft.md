@@ -23,28 +23,13 @@ If the user replies anything other than yes / y / oui, stop immediately without 
 
 ## Step 0 — Load Config
 
-Run `cat config.json`. Extract `supabase_connection_string` → PG_CONN, `pg_module_path` → PG_MODULE, `user.profile_id` → USER_PROFILE, and the `france_travail_api` block.
+Read `.claude/rules/db.md` and use `scripts/db.js` for all database access below.
+
+Run `cat config.json` via Bash and extract `user.profile_id` → USER_PROFILE, and the `france_travail_api` block.
 
 If `france_travail_api.client_id` or `client_secret` is null: stop and tell the user to register at https://francetravail.io/inscription, create an app, subscribe to "Offres d'emploi v2", and paste the client ID/secret into `config.json` under `france_travail_api`.
 
 If `france_travail_api.rome_codes` is empty: stop and tell the user to run `node scripts/ft_rome_lookup.js`, confirm the candidate codes it prints, and add the confirmed ones to `france_travail_api.rome_codes` in `config.json` before continuing.
-
-```bash
-PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
-const {Client}=require(process.env.PG_MODULE);
-const c=new Client({connectionString:process.env.PG_CONN});
-c.connect()
-  .then(()=>c.query('<SQL>',[<params>]))
-  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
-  .catch(e=>{console.error(e.message);process.exit(1);});
-"
-```
-
-**If the connection fails on the first attempt** (`ECONNRESET`, timeout, or similar) — do not retry the Postgres connection in a loop. Check fast instead:
-```bash
-curl -s -m 8 -o /dev/null -w "%{http_code}" "<supabase_url>/rest/v1/"
-```
-`401` → project active, retry once. Connection error/timeout → project is very likely paused; tell the user to resume it at supabase.com/dashboard and stop.
 
 ---
 

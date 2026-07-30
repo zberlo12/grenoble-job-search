@@ -8,62 +8,9 @@ allowed-tools: mcp__claude_ai_Google_Drive__list_recent_files, mcp__claude_ai_Go
 
 ## Step 0 — Load Config
 
-Run `cat config.json` via Bash. Parse the output and extract:
-- `supabase_connection_string` → PG_CONN
-- `pg_module_path` → PG_MODULE
-- `user.name`, `user.email`, `user.salary_floor_apply` → name, email, salary floor
-- `user.profile_id` → USER_PROFILE
-- `cv_approaches` → CV approach options and flags
-- `notion.application_docs_id` → Application Documents parent page ID
+Read `.claude/rules/db.md` and use `scripts/db.js` for all database access below.
 
-**DB query pattern** — substitute actual `PG_MODULE` and `PG_CONN` values from config in every Bash call:
-```bash
-PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
-const {Client}=require(process.env.PG_MODULE);
-const c=new Client({connectionString:process.env.PG_CONN});
-c.connect()
-  .then(()=>c.query('<SQL>',[<params>]))
-  .then(r=>{console.log(JSON.stringify(r.rows));return c.end();})
-  .catch(e=>{console.error(e.message);process.exit(1);});
-"
-```
-
-**If the connection fails on the first attempt** (`ECONNRESET`, timeout, or similar) — do not retry the Postgres connection in a loop. Supabase projects on the free tier auto-pause after ~1 week of inactivity, and a paused project produces exactly this symptom: the pooler hostname resolves and accepts TCP, but the connection resets once it tries to route to this project (the project's own `<supabase_url>` subdomain may also stop resolving in DNS while paused). Check fast instead of retrying blindly:
-```bash
-curl -s -m 8 -o /dev/null -w "%{http_code}" "<supabase_url>/rest/v1/"
-```
-- `401` → project is active; the DB failure was transient — retry the Postgres connection once more.
-- Connection error / timeout / no response → project is very likely paused. Stop retrying and tell the user: "The Supabase project looks paused — please resume it at https://supabase.com/dashboard, then I'll continue." Do not attempt DNS workarounds or disable TLS certificate verification to work around this.
-
-**REST API mode (remote triggers):** When `SUPABASE_URL` and `SUPABASE_KEY` are provided via trigger config instead (TCP ports 5432/6543 are blocked in remote environments), skip `cat config.json` and use `curl` for all DB calls:
-
-```bash
-# SELECT
-curl -s "SUPABASE_URL/rest/v1/<table>?<filters>&select=<cols>&order=<col>.<dir>&limit=<n>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY"
-
-# INSERT (returns inserted row)
-curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
-  -H "Content-Type: application/json" -H "Prefer: return=representation" \
-  -d '<JSON>'
-
-# UPDATE
-curl -s -X PATCH "SUPABASE_URL/rest/v1/<table>?<filter>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
-  -H "Content-Type: application/json" \
-  -d '<JSON>'
-
-# UPSERT (ON CONFLICT DO UPDATE)
-curl -s -X POST "SUPABASE_URL/rest/v1/<table>" \
-  -H "apikey: SUPABASE_KEY" -H "Authorization: Bearer SUPABASE_KEY" \
-  -H "Content-Type: application/json" \
-  -H "Prefer: resolution=merge-duplicates,return=representation" \
-  -d '<JSON>'
-```
-
-Filter operators: `col=eq.val` · `col=ilike.*val*` · `col=gte.val` · `col=lt.val` · `col=in.(a,b)` · `col=not.in.(a,b)` — multiple filters ANDed with `&`.
-UNION queries: run two separate GETs and treat as found if either returns results.
+Run `cat config.json` via Bash and extract `user.name`, `user.email`, `user.salary_floor_apply`, `user.profile_id` → USER_PROFILE, `cv_approaches` → CV approach options and flags, `notion.application_docs_id` → Application Documents parent page ID.
 
 ---
 

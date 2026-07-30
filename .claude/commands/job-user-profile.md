@@ -105,24 +105,10 @@ Confirm after each update: "Done — [what changed]. The change takes effect imm
 
 Query the current values first via Bash, then UPDATE the relevant column.
 
+Read `.claude/rules/db.md` and use `scripts/db.js` for this and the write below:
 ```bash
-# Read current candidate_profile row
-PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
-const {Client}=require(process.env.PG_MODULE);
-const c=new Client({connectionString:process.env.PG_CONN});
-c.connect()
-  .then(()=>c.query('SELECT experience_summary,fp_and_a_highlights,cost_control_highlights,p2p_highlights,cl_rules,tone_profile FROM candidate_profile WHERE user_email=\$1',['<user_email>']))
-  .then(r=>{console.log(JSON.stringify(r.rows[0],null,2));return c.end();})
-  .catch(e=>{console.error(e.message);process.exit(1);});
-"
+node scripts/db.js query "SELECT experience_summary,fp_and_a_highlights,cost_control_highlights,p2p_highlights,cl_rules,tone_profile FROM candidate_profile WHERE user_email=\$1" '["<user_email>"]'
 ```
-
-**If the connection fails on the first attempt** (`ECONNRESET`, timeout, or similar) — do not retry the Postgres connection in a loop. Supabase projects on the free tier auto-pause after ~1 week of inactivity, and a paused project produces exactly this symptom: the pooler hostname resolves and accepts TCP, but the connection resets once it tries to route to this project (the project's own `<supabase_url>` subdomain may also stop resolving in DNS while paused). Check fast instead of retrying blindly:
-```bash
-curl -s -m 8 -o /dev/null -w "%{http_code}" "<supabase_url>/rest/v1/"
-```
-- `401` → project is active; the DB failure was transient — retry the Postgres connection once more.
-- Connection error / timeout / no response → project is very likely paused. Stop retrying and tell the user: "The Supabase project looks paused — please resume it at https://supabase.com/dashboard, then I'll continue." Do not attempt DNS workarounds or disable TLS certificate verification to work around this.
 
 **Section 7 — Experience & metrics:**
 - Show current `experience_summary`, `fp_and_a_highlights`, `cost_control_highlights`, `p2p_highlights`.
@@ -146,14 +132,7 @@ curl -s -m 8 -o /dev/null -w "%{http_code}" "<supabase_url>/rest/v1/"
 
 ```bash
 # Write updated value (example — substitute column and value)
-PG_MODULE="<pg_module_path>" PG_CONN="<supabase_connection_string>" node -e "
-const {Client}=require(process.env.PG_MODULE);
-const c=new Client({connectionString:process.env.PG_CONN});
-c.connect()
-  .then(()=>c.query('UPDATE candidate_profile SET <column>=\$1, updated_at=NOW() WHERE user_email=\$2',['<new_value>','<user_email>']))
-  .then(()=>{console.log('OK');return c.end();})
-  .catch(e=>{console.error(e.message);process.exit(1);});
-"
+node scripts/db.js query "UPDATE candidate_profile SET <column>=\$1, updated_at=NOW() WHERE user_email=\$2" '["<new_value>","<user_email>"]'
 ```
 
 Confirm: "Done — Candidate Profile updated in database. The change takes effect immediately for /job-apply and /job-interview-prep."
