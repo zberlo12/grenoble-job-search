@@ -3,9 +3,16 @@
 /**
  * ft_rome_lookup.js
  *
- * One-off helper: queries the France Travail ROME référentiel (metiers) API
- * for each target job title in config.json job_titles.french, and prints the
- * matching ROME codes for the user to review and confirm.
+ * One-off helper: fetches the full France Travail ROME référentiel (metiers)
+ * catalog — the endpoint ignores q/motsCles/libelle query params and always
+ * returns all ~1,911 entries regardless — then filters client-side by keyword
+ * against config.json job_titles.french, and prints the matching ROME codes
+ * for the user to review and confirm.
+ *
+ * The endpoint is also rate-limited to 1 request/second (burst capacity 1),
+ * far stricter than the 10/s job-offers API. Since the full catalog comes
+ * back in a single call, that limit only matters if this script is ever
+ * changed to paginate or retry.
  *
  * Do NOT auto-write results into config.json — per the Phase 4 plan, ROME
  * codes must be confirmed by the user before being wired into
@@ -20,10 +27,6 @@ const path = require('path');
 
 const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.json'), 'utf-8'));
 const FT  = cfg.france_travail_api;
-
-const CALL_DELAY = 300; // ms between API calls
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function getToken() {
   const body = new URLSearchParams({
@@ -44,17 +47,25 @@ async function getToken() {
   return json.access_token;
 }
 
-async function searchRome(token, query) {
-  const url = `${FT.api_base_url}/rome-metiers/v1/metiers/metier?q=${encodeURIComponent(query)}`;
+async function fetchAllMetiers(token) {
+  const url = `${FT.api_base_url}/rome-metiers/v1/metiers/metier`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
-  if (res.status === 204) return [];
   if (!res.ok) {
-    console.error(`  "${query}": ${res.status} ${await res.text()}`);
-    return [];
+    throw new Error(`ROME catalog fetch failed: ${res.status} ${await res.text()}`);
   }
   return res.json();
+}
+
+// Strips accents/case so keyword matching works against both accented and
+// plain-ASCII title variants (e.g. "contrôleur" vs "controleur").
+function normalize(str) {
+  return str.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function wordsOf(str) {
+  return normalize(str).match(/[a-z0-9]+/g) || [];
 }
 
 async function run() {
@@ -66,35 +77,42 @@ async function run() {
   }
 
   const titles = cfg.job_titles.french;
-  console.log(`Looking up ROME codes for ${titles.length} title(s)...\n`);
+  console.log(`Fetching full ROME catalog and filtering against ${titles.length} title(s)...\n`);
 
   const token = await getToken();
+  const start = Date.now();
+  const catalog = await fetchAllMetiers(token);
+  console.log(`Fetched ${catalog.length} ROME entries in ${Date.now() - start}ms.\n`);
+
+  // Build a keyword list from each config title's significant words (drop
+  // short connector words like "de", "et", "du"), matched as whole word
+  // tokens against the libelle — not substrings — so "RAF" never matches
+  // inside "trafic" and short acronyms don't silently drop out.
+  // Titles that reduce to a single generic word (e.g. "Responsable FP&A" →
+  // just "responsable") are skipped entirely: one common word alone floods
+  // the results with unrelated professions and isn't a real signal.
+  const STOPWORDS = new Set(['de', 'du', 'des', 'et', 'la', 'le', 'les', 'a', 'en', 'aux']);
+  const titleKeywords = titles.map(title => {
+    const isBareAcronym = /^[A-Za-zÀ-ÿ]{2,5}$/.test(title.trim()) && title.trim() === title.trim().toUpperCase();
+    const words = wordsOf(title).filter(w => !STOPWORDS.has(w) && w.length >= (isBareAcronym ? 2 : 4));
+    return { title, words, isBareAcronym };
+  });
 
   // code -> { libelle, matchedTitles: [] }
   const codes = new Map();
 
-  for (const title of titles) {
-    let matches;
-    try {
-      matches = await searchRome(token, title);
-    } catch (e) {
-      console.error(`  "${title}": ${e.message}`);
-      continue;
-    }
-    if (!Array.isArray(matches) || matches.length === 0) {
-      console.log(`  "${title}" → no match`);
-    } else {
-      const summary = matches.map(m => `${m.code} ${m.libelle}`).join(' | ');
-      console.log(`  "${title}" → ${summary}`);
-      for (const m of matches) {
-        if (!codes.has(m.code)) codes.set(m.code, { libelle: m.libelle, matchedTitles: [] });
-        codes.get(m.code).matchedTitles.push(title);
+  for (const entry of catalog) {
+    const libWords = new Set(wordsOf(entry.libelle));
+    for (const { title, words, isBareAcronym } of titleKeywords) {
+      const minWords = isBareAcronym ? 1 : 2;
+      if (words.length >= minWords && words.every(w => libWords.has(w))) {
+        if (!codes.has(entry.code)) codes.set(entry.code, { libelle: entry.libelle, matchedTitles: [] });
+        codes.get(entry.code).matchedTitles.push(title);
       }
     }
-    await sleep(CALL_DELAY);
   }
 
-  console.log('\n--- Candidate ROME codes (review before adding to config.json) ---');
+  console.log('--- Candidate ROME codes (review before adding to config.json) ---');
   const sorted = [...codes.entries()].sort((a, b) => b[1].matchedTitles.length - a[1].matchedTitles.length);
   for (const [code, info] of sorted) {
     console.log(`${code}  ${info.libelle}`);
