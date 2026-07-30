@@ -224,7 +224,7 @@ Pass `['%company%', '%title_root%']` as params. If found → tell user and skip 
 
 ### Step 8b — Create the entry
 
-**For Needs Info (rescue gate) → `review_queue`:**
+**For Needs Info (rescue gate) or ranked B/C → `review_queue`:**
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
@@ -233,7 +233,7 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 RETURNING id
 ```
 
-**For all other outcomes → `job_applications`:**
+**For Priority A or Skip → `job_applications`:**
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,
@@ -243,7 +243,7 @@ RETURNING id
 ```
 
 Field values:
-- `status`: `'To Assess'` (ranked B/C), `'To Apply'` (ranked A), `'Dismissed'` (Skip), `'Needs Info'` (rescue gate → review_queue)
+- `status`: `'To Assess'` (ranked B/C → **`review_queue`**), `'To Apply'` (ranked A → `job_applications`), `'Dismissed'` (Skip → `job_applications`), `'Needs Info'` (rescue gate → `review_queue`)
 - `red_flags`: `JSON.stringify([...])` — values from: `Low salary`, `French only`, `No hybrid`, `Far location`, `Fixed-term`, `Junior scope`
 - `missing_info`: `JSON.stringify([...])` — values from: `Salary`, `Hybrid policy`, `Scope`, `Full JD`, `Company name`
 - `english`: `true` / `false` (boolean)

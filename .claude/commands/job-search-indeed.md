@@ -184,7 +184,7 @@ For remote search: location zone defaults to 🌐 Remote.
 
 For each surviving listing:
 
-**Needs Info → `review_queue`:**
+**Needs Info or ranked B/C → `review_queue`:**
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
@@ -193,7 +193,7 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 RETURNING id
 ```
 
-**Ranked (To Assess/To Apply/Dismissed) → `job_applications`:**
+**Priority A or Skip → `job_applications`:**
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,
@@ -204,7 +204,7 @@ RETURNING id
 
 Field values:
 - `source`: `'Indeed'`
-- `status`: `'To Assess'` (ranked B/C), `'To Apply'` (A), `'Dismissed'` (Skip), `'Needs Info'` (rescue gate → review_queue only)
+- `status`: `'To Assess'` (ranked B/C → **`review_queue`**), `'To Apply'` (A → `job_applications`), `'Dismissed'` (Skip → `job_applications`), `'Needs Info'` (rescue gate → `review_queue`)
 - `red_flags`: `JSON.stringify([...])`, `missing_info`: `JSON.stringify([...])`
 - `english`: boolean `true`/`false`
 - `date_added`: today as `'YYYY-MM-DD'`

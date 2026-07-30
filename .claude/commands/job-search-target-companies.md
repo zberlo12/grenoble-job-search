@@ -139,7 +139,7 @@ If found in either → skip.
 
 ## Step 5 — Write New Roles to Supabase
 
-**Needs Info → `review_queue`:**
+**Needs Info or ranked B/C → `review_queue`:**
 ```sql
 INSERT INTO review_queue
 (job_title,company,source,location,salary,priority,status,date_added,
@@ -148,7 +148,7 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 RETURNING id
 ```
 
-**Ranked → `job_applications`:**
+**Priority A or Skip → `job_applications`:**
 ```sql
 INSERT INTO job_applications
 (job_title,company,source,location,salary,priority,cv_approach,status,
@@ -159,7 +159,7 @@ RETURNING id
 
 Field values:
 - `source`: `'Direct'`
-- `status`: `'To Assess'` (B/C), `'To Apply'` (A), `'Dismissed'` (skip), `'Needs Info'` (rescue gate → review_queue)
+- `status`: `'To Assess'` (B/C → **`review_queue`**), `'To Apply'` (A → `job_applications`), `'Dismissed'` (skip → `job_applications`), `'Needs Info'` (rescue gate → `review_queue`)
 - `red_flags`: `JSON.stringify([...])`, `missing_info`: `JSON.stringify([...])`
 - `english`: `true`/`false`
 - `date_added`: today as `'YYYY-MM-DD'`
