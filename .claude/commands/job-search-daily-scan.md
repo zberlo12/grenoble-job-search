@@ -129,33 +129,11 @@ If both checks return empty → not a duplicate. Proceed with analysis (Step 3b 
 
 ### 3b — Rescue gate (apply BEFORE standard ranking)
 
-**Operational/non-finance gate (check first):**
-If the role is operational, logistics, supply chain, manufacturing, or non-finance project management (i.e. not primarily a finance/accounting/controlling title) → always route to `status='Needs Info'`, `priority='B'`, `notes` starts with `'OPERATIONAL ROLE — review for fit'`. Do not apply standard ranking. Do not dismiss.
-
-**Standard rescue gate:**
-If ALL of the following are true:
-1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level, Financial Analyst, CDG, RAF, DAF, Chef Comptable, Trésorerie, Audit, SSC, Project Manager Finance/ERP)
-2. Location is Green, Yellow, or Remote
-3. No hard disqualifier (Paris on-site, explicitly entry-level ≤3 yrs required, salary stated below €45K)
-
-…AND any of Salary, Hybrid policy, Full scope, or Company name is missing:
-→ `status='Needs Info'`, `priority='B'`, `missing_info`=list of missing fields, `notes` starts with `'QUEUED:'`
-
-**Tiebreaker:** When genuinely unclear, always route to Needs Info. Only assign Dismissed when a disqualifier is unambiguous.
+Read `.claude/rules/scoring.md` §2 (Rescue Gate) and §4 (Hard Disqualifiers) and apply them exactly — the operational/non-finance gate matters most for this skill, since Gmail alerts surface a wider net of adjacent-function roles than a manual paste or targeted Indeed search does. Route statuses (`Needs Info`/`B` priority, `notes` prefixes `'OPERATIONAL ROLE — review for fit'` or `'QUEUED:'`) exactly as scoring.md specifies.
 
 ### 3c — Standard priority criteria (fully-populated listings only)
 
-**Location zones** (from config):
-- Green (0–25 min): Grenoble, Échirolles, Meylan, Saint-Égrève, Pont-de-Claix, Montbonnot, Crolles, Voreppe, Bernin, Saint-Martin-d'Hères, dept 38 core towns
-- Yellow (30–50 min): Voiron, Moirans, Chambéry, Saint-Marcellin, Pontcharra
-- Orange (1h–1h45): Valence, Annecy, Ugine, Faverges, Cluses, Bourg-en-Bresse, Albertville
-- Red (1h15+ / no hybrid): Lyon, Paris, Luxembourg
-
-**Priority rules:**
-- **A**: Senior finance/FP&A/controlling, Green or Yellow, CDI, English exposure, ≥€55K → `job_applications` `To Apply`
-- **B**: Good fit on 3/4 criteria → `review_queue` `To Assess`
-- **C**: Multiple mismatches or one disqualifying factor → `review_queue` `To Assess`
-- **Dismissed**: Definitive disqualifier (Paris on-site, explicitly entry-level with ≤3 years required, <€40K stated, truly unrelated role — IT development, medical, marketing, HR professional, legal, education) → `job_applications` `Dismissed`, populate `red_flags`, `notes='Auto-dismissed: [reason]'`. Operational/logistics/supply chain/PM roles are NEVER auto-dismissed — see rescue gate above.
+Read `.claude/rules/scoring.md` §1 (Location Zones) and §3 (Priority Criteria) and apply them exactly, using `location_zones` from config for city/department matching.
 
 ### 3d — Write to Supabase
 

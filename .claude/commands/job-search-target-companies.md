@@ -112,10 +112,7 @@ If both rungs fail, note the company in the manual check list.
 
 ## Step 3 — Assess Roles Found
 
-Apply standard analysis to each finance role identified:
-- Is the title senior enough? (Finance Director, FP&A, Controller, P2P, RAF, DAF — yes. Junior analyst, assistant comptable — skip.)
-- Location zone assessment (Green/Yellow/Remote = yes; Orange = hybrid required; Red = skip)
-- Rescue gate: if title and company are strong but salary/hybrid missing → Needs Info
+Read `.claude/rules/scoring.md` §1–4 and apply them exactly to each finance role identified — location zones, the rescue gate, priority criteria, and hard disqualifiers.
 
 Do not write roles that are clearly junior, wrong function, or hard disqualifiers.
 

@@ -96,19 +96,7 @@ Parse the listing and identify:
 
 ## Step 2 — Location Zone Assessment
 
-Apply these rules every time without exception:
-
-| Zone | Commute | Rule |
-|---|---|---|
-| 🟢 Green | 0–25 min | Daily on-site fine — no condition |
-| 🟡 Yellow | 30–50 min | Apply — but confirm hybrid before writing documents |
-| 🟠 Orange | 1h–1h45 | Only apply if explicitly hybrid ≤2 days/week |
-| 🔴 Red | 1h15+ without hybrid | Skip without hesitation |
-| 🌐 Remote | Any location | Assess on role fit alone |
-
-Use location_zones from config for city/department matching. Key rules:
-- Dept 73 (Savoie): check specific town — Chambéry = Yellow, Maurienne valley = Red
-- Dept 01 (Ain): treat as Orange/Red
+Read `.claude/rules/scoring.md` §1 and apply it exactly, using `location_zones` from config for city/department matching.
 
 ---
 
@@ -138,32 +126,13 @@ Check for and clearly state any of:
 
 ## Step 5 — Rescue Gate (before priority)
 
-If ALL of the following are true:
-1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance, Procurement at senior level)
-2. Location is 🟢 Green, 🟡 Yellow, or 🌐 Remote
-3. No hard disqualifier present
-
-...AND any of Salary, Hybrid policy, Full scope, or Company name is missing → route to review queue:
-- `status = "Needs Info"`, `priority = "B"` (provisional)
-- `missing_info` = list of missing fields
-
-**Hard disqualifiers (rescue gate does NOT apply):**
-- Paris or Red-zone city, on-site only
-- Role explicitly junior
-- Wrong function entirely
-- Salary explicitly stated below €45K
+Read `.claude/rules/scoring.md` §2 (Rescue Gate) and §4 (Hard Disqualifiers) and apply them exactly.
 
 ---
 
 ## Step 5b — Priority Rating
 
-**🟢 Priority A** — Strong match: senior finance/FP&A, Green or Yellow zone, CDI, English exposure, salary ≥ salary_floor_apply. Apply with custom CV.
-
-**🟡 Priority B** — Solid but conditional: good role fit with one weakness. Worth pursuing with clarification.
-
-**🔴 Priority C** — Weak or problematic: multiple mismatches or one disqualifying factor.
-
-**⛔ Skip** — Definitive disqualifier. Explain clearly.
+Read `.claude/rules/scoring.md` §3 (Priority Criteria) and apply it exactly.
 
 ---
 

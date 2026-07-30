@@ -161,14 +161,12 @@ Do NOT retry if first call returns blocked/truncated/empty. Fall through to manu
 
 ## Step 3 — Re-rank (apply after successful enrichment of a Needs Info row)
 
-With enriched information, apply standard analysis:
+Read `.claude/rules/scoring.md` §1 (Location Zones) and §3 (Priority Criteria) and apply them exactly with the enriched data, plus:
 
-- Location zone — reconfirm with full location data
 - Role fit — seniority, function, English, company quality, contract
 - Red flags — update the list
-- Priority rating — assign final A / B / C / Skip
 
-The rescue gate does NOT reapply in review — produce a final ranking.
+The rescue gate (scoring.md §2) does NOT reapply in review — produce a final ranking per §3 (see scoring.md §6).
 If information is STILL missing after enrichment, add to manual-paste list.
 
 ---
@@ -442,7 +440,7 @@ Type `stop` at any point to halt and jump to final summary.
 
 ## Step 7 — Hard disqualifier fast-path
 
-If enriched data reveals a clear disqualifier (Paris on-site, salary stated below €40K, unrelated function) — write to job_applications as Dismissed and tell the user in one sentence.
+If enriched data reveals a clear disqualifier per `.claude/rules/scoring.md` §4 (Red-zone on-site, salary below `user.salary_floor_reject`, unrelated function) — write to job_applications as Dismissed and tell the user in one sentence.
 
 ---
 

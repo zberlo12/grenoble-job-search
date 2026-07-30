@@ -153,33 +153,11 @@ If found in either table → discard. If not found → proceed to analysis.
 
 ## Step 4 — Analyse Each Listing
 
-### Adjacent title recognition
+### Adjacent title recognition (source-specific to Indeed — see scoring.md §6)
 Before skipping on title alone, check whether the role content (snippet, job details) suggests a finance leadership function. Watch for: "Responsable de Gestion", "Gestionnaire Financier Senior", "Responsable Performance", "Finance & Operations Manager".
 
-### Rescue gate (apply FIRST)
-If ALL true:
-1. Title family matches (Finance Director, FP&A, Controlling, P2P, Supply Chain Finance at senior level)
-2. Location is 🟢 Green, 🟡 Yellow, 🌐 Remote, or unspecified for remote search
-3. No hard disqualifier (Paris on-site, explicitly junior, salary stated below €45K)
-
-...AND any of Salary, Hybrid policy, Full scope, or Company name is missing → route to review_queue:
-- `status = 'Needs Info'`, `priority = 'B'` (provisional)
-
-**Tiebreaker**: When genuinely unclear, always route to Needs Info.
-
-### Location zones (local search)
-- 🟢 Green: Grenoble, Échirolles, Meylan, Saint-Égrève, Pont-de-Claix, Montbonnot, Crolles, Voreppe, Bernin, Saint-Martin-d'Hères, dept 38 core towns
-- 🟡 Yellow: Voiron, Moirans, Chambéry, Saint-Marcellin, Pontcharra
-- 🟠 Orange: Valence, Annecy, Ugine, Faverges, Cluses, Bourg-en-Bresse, Albertville
-- 🔴 Red: Lyon, La Tour-en-Maurienne, Paris, Luxembourg
-
-For remote search: location zone defaults to 🌐 Remote.
-
-### Priority rules
-- 🟢 A: Senior finance/FP&A/controlling, Green/Yellow/Remote, CDI, English exposure, ≥€55K
-- 🟡 B: Good fit on 3/4 criteria; or Tier A company with one weakness
-- 🔴 C: Multiple mismatches or one disqualifying factor
-- ⛔ Skip: Definitive disqualifier
+### Rescue gate, location zones, and priority rules
+Read `.claude/rules/scoring.md` §1–4 and apply them exactly, using `location_zones` from config for city/department matching. For remote search: location zone defaults to 🌐 Remote.
 
 ---
 
