@@ -48,59 +48,16 @@ GROUP BY status
 
 Collect counts for: Potentially Apply, To Apply, Docs Ready, Applied, Interview, On Hold, Needs Info. Dismissed and Rejected are excluded — they are dead rows and add noise.
 
-**D. Application response check:**
+**D. Awaiting status check (read-only count — no Gmail search, no writes):**
 
 ```sql
-SELECT id, company, job_title, date_applied, date_added, notes, gmail_thread_url
-FROM job_applications
+SELECT count(*)::int AS n FROM job_applications
 WHERE status IN ('Applied', 'Interview')
   AND user_profile = '<USER_PROFILE>'
-  AND COALESCE(date_applied, date_added) < CURRENT_DATE - INTERVAL '7 days'
+  AND COALESCE(date_applied, date_added) < CURRENT_DATE - INTERVAL '14 days'
 ```
 
-For each row, search Gmail in parallel:
-```
-"[Company]" (entretien OR interview OR retenu OR refusé OR rejected OR suite OR félicitations OR offer) after:YYYY/MM/DD -label:jobs
-```
-Use `date_applied` (or `date_added` as fallback) formatted as `YYYY/MM/DD` for the `after:` filter.
-
-**Classify response:**
-- Interview → entretien, interview, rendez-vous, call, visio
-- Offer → offre, proposition, félicitations, offer letter
-- Rejected → refusé, ne correspond pas, other candidates, poursuivons sans
-- Unknown → include for manual review
-
-**If a response is found — update Supabase:**
-```sql
-UPDATE job_applications
-SET status=$1, date_response=CURRENT_DATE,
-    notes=COALESCE(notes,'')||$2,
-    gmail_thread_url=COALESCE(NULLIF(gmail_thread_url,''),$3)
-WHERE id=$4
-```
-
-**Auto-expiry:**
-```sql
-UPDATE job_applications
-SET status='Dismissed',
-    notes=COALESCE(notes,'')||' | Auto-expired: no response after 60 days'
-WHERE status='Applied'
-  AND date_applied < CURRENT_DATE - INTERVAL '60 days'
-  AND COALESCE(notes,'') NOT LIKE '%Auto-expired%'
-  AND user_profile = '<USER_PROFILE>'
-RETURNING id, job_title, company
-```
-
-**Follow-up nudge:** for Applied rows 14–45 days old with no response found and no "relance"/"follow-up sent" in notes → flag under "Consider Following Up" in the digest. Do NOT update status or notes.
-
-**Human contact detection:** If a response is found and the sender appears to be a named human (not noreply/auto/careers@ address), upsert into `networking_contacts`:
-```sql
-INSERT INTO networking_contacts (name, company, role, email, last_contact, source, notes, user_profile)
-VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5, $6)
-ON CONFLICT (email) DO UPDATE SET last_contact=EXCLUDED.last_contact,
-  notes=COALESCE(networking_contacts.notes,'')||' | '||EXCLUDED.notes
-RETURNING id
-```
+This skill performs zero INSERTs and zero UPDATEs. Response detection, auto-expiry, follow-up nudges, and networking-contact upserts all live in `/job-status` now — this step only counts how many rows are old enough to be worth checking.
 
 ## Step 2 — Output
 
@@ -135,16 +92,10 @@ On Hold          : X
 ─────────────────
 Active total     : X
 
-[Only include if Step 1D found responses:]
-APPLICATION UPDATES
-───────────────────
-• [Job Title] @ [Company] — [new status] (was Applied)
-• [Job Title] @ [Company] — Unknown response — review Gmail thread
-
-[Only include if Step 1D found follow-up candidates:]
-CONSIDER FOLLOWING UP
-─────────────────────
-• [Job Title] @ [Company] — applied [N] days ago
+[Only include if Step 1D count > 0:]
+AWAITING STATUS CHECK
+──────────────────────
+[N] applications 14+ days old — run /job-status
 
 SUGGESTED NEXT STEP
 ────────────────────

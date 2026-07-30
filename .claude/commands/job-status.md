@@ -47,6 +47,17 @@ For any thread found, call `get_thread` to classify:
 
 **Auto-expiry check:** For each `Applied` row where `date_applied` is more than auto-expiry threshold days ago and no response found → mark for auto-expiry: `status = 'Dismissed'`, append to notes.
 
+**Follow-up nudge (informational only):** For `Applied` rows 14–45 days old with no response found and no "relance"/"follow-up sent" in notes → flag under "Consider Following Up" in Step 3. Do NOT update status or notes for these.
+
+**Human contact detection:** If a response is found and the sender appears to be a named human (not noreply/auto/careers@ address), upsert into `networking_contacts`:
+```sql
+INSERT INTO networking_contacts (name, company, role, email, last_contact, source, notes, user_profile)
+VALUES ($1, $2, $3, $4, CURRENT_DATE, 'Application response', $5, $6)
+ON CONFLICT (email) DO UPDATE SET last_contact=EXCLUDED.last_contact,
+  notes=COALESCE(networking_contacts.notes,'')||' | '||EXCLUDED.notes
+RETURNING id
+```
+
 ---
 
 ## Step 3 — Present Status Table
@@ -64,6 +75,12 @@ For any thread found, call `get_thread` to classify:
 
 "Days" = days since date_applied (or date_added if no apply date).
 "Response detected" = what Gmail sweep found, or "—" if nothing.
+
+**If any rows were flagged by the follow-up nudge, show them below the table:**
+```
+### Consider Following Up
+- [Title] @ [Company] — applied [N] days ago, no response yet
+```
 
 ---
 
@@ -125,6 +142,9 @@ Confirm each update with the affected row count.
 
 **No changes:**
 - [Title] @ [Company]: Applied, [N] days, no response yet
+
+**Consider following up:**
+- [Title] @ [Company]: applied [N] days ago, no response yet
 
 **Still open:**
 - [N] Applied · [N] Interview · [N] Docs Ready
