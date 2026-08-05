@@ -59,11 +59,13 @@ Pass `[threadId, parseDate, USER_PROFILE]`. If row returned → skip thread (cou
 
 ### 3b — Route by source
 
-**APEC** (`from:offres@diffusion.apec.fr`): Do not call `get_thread`. Insert one summary row:
+**APEC** (`from:offres@diffusion.apec.fr`): Do not call `get_thread` — APEC alert emails are digests ("11 offres match your search") with no per-listing data in the body, so there is nothing to parse out of the email itself. Insert one summary row as a trigger/audit record:
 - `parse_status='manual_check'`
-- `parse_notes`: combine listing count from subject (e.g. "11 offres") + alert keyword + source note. Format: `'APEC: [N offres] — [alert_keyword] — HTML-only — check apec.fr manually'`. If count not in subject, omit it.
+- `parse_notes`: combine listing count from subject (e.g. "11 offres") + alert keyword + source note. Format: `'APEC: [N offres] — [alert_keyword] — digest only — resolved via Chrome in Step 5b'`. If count not in subject, omit it.
 - `alert_keyword` from subject; `raw_snippet` from search snippet; `raw_body` = subject + ' | ' + snippet (truncated to 500 chars)
 - `gmail_thread_url` = `https://mail.google.com/mail/u/0/#all/<threadId>`
+
+This row's only job is to signal "APEC had activity on this date" — Step 5b (interactive runs) replaces the real listing data by visiting apec.fr directly under your logged-in session, since the digest email can never contain it. If Step 5b runs successfully, these stub rows get marked `processed` at the end of that step rather than lingering as `manual_check`.
 
 **Known HTML-only sources** (check BEFORE calling `get_thread`): If the sender domain matches any entry in `HTML_ONLY_SOURCES` (from config), skip `get_thread` entirely. INSERT immediately:
 - `parse_status='puppeteer_pending'`
@@ -183,9 +185,9 @@ Threads found:     [N total from all 3 Gmail searches]
 Listings written to listing_inbox:
   pending:              [N]  (ready for daily scan)
     of which subject-parsed: [N]  (HTML-only body — verify fields in daily scan)
-  puppeteer_pending:    [N]  (HTML-only — extracted via Chrome in Step 5, or on next interactive run)
+  puppeteer_pending:    [N]  (HTML-only — extracted via Chrome in Step 5a, or on next interactive run)
   url_dedup:            [N]  (same URL seen in last 7 days — skipped)
-  manual_check:         [N]  (APEC only — visit apec.fr manually)
+  manual_check:         [N]  (APEC digest stubs — resolved via Chrome in Step 5b below, or on next interactive run)
   errors:               [N]  (if any INSERT failed — list them)
 
 [If puppeteer_pending > 0 AND running as remote trigger:]
@@ -193,9 +195,12 @@ HTML-only emails queued (extracted automatically via Chrome on next interactive 
   Then: /job-search-daily-scan (or it runs automatically at 00:01)
   Sources flagged: Cadremploi, HelloWork (add new sources to html_only_sources in config)
 
-[If manual_check > 0:]
-Manual check required (APEC only — emails contain no listing data):
+[If manual_check > 0 after Step 5b:]
+Manual check required (Step 5b did not resolve these — remote trigger, or Chrome extraction failed/blocked):
   APEC: [N] alerts — visit https://www.apec.fr/candidat/recherche-emploi.html
+
+[If Step 5b ran:]
+APEC saved-search extraction: [N] listings found, [N] new (structured), [N] already in pipeline (skipped)
 
 [If errors > 0:]
 Failed inserts — investigate:
@@ -206,7 +211,11 @@ Failed inserts — investigate:
 
 ## Step 5 — Chrome extraction (interactive runs only)
 
-If `REMOTE_TRIGGER` environment variable is NOT set (i.e. running in a live Claude session, not as a nightly cron), extract the `puppeteer_pending` rows now using the Chrome connector instead of launching Edge/Puppeteer:
+**Skip both 5a and 5b entirely if running as a remote trigger** (nightly cron at 23:30) — the Chrome connector requires a live interactive session and cannot run unattended in the remote environment. Unresolved rows remain queued (`puppeteer_pending` / APEC `manual_check`) until the next local/interactive run of `/job-search-daily-scan`, which detects them in Step 0b and extracts them automatically.
+
+### 5a — Cadremploi / HelloWork (Gmail-thread extraction)
+
+If `REMOTE_TRIGGER` environment variable is NOT set, extract the `puppeteer_pending` rows now using the Chrome connector instead of launching Edge/Puppeteer:
 
 For each `puppeteer_pending` row (query `SELECT id, gmail_thread_url, source, alert_keyword FROM listing_inbox WHERE parse_status='puppeteer_pending' AND user_profile=$1`):
 
@@ -217,4 +226,56 @@ For each `puppeteer_pending` row (query `SELECT id, gmail_thread_url, source, al
 
 Batch multiple rows in one `browser_batch` call (navigate → wait → get_page_text, repeated) rather than one tool round-trip per row.
 
-**Skip this step if running as a remote trigger** (nightly cron at 23:30) — the Chrome connector, like Puppeteer before it, requires a live interactive session and cannot run unattended in the remote environment. The `puppeteer_pending` rows will remain until the next local/interactive run of `/job-search-daily-scan`, which will detect them in Step 0b and extract them automatically.
+### 5b — APEC (saved-search extraction)
+
+APEC alert emails never contain listing data (see Step 3b) — the only way to get real fields is to visit apec.fr under the user's own logged-in session and read their saved searches directly. This step reads what APEC already chose to show the user; it never searches, paginates, or enumerates beyond the saved searches already configured on the account, never logs in (the Chrome session is assumed already authenticated), and never clicks "Postuler" / any apply or submit control.
+
+**Trigger:** run once per invocation, before checking anything else, if this query returns > 0:
+```sql
+SELECT COUNT(*) FROM listing_inbox WHERE source='APEC' AND parse_status='manual_check' AND user_profile=$1
+```
+If 0, skip 5b entirely.
+
+**Procedure:**
+
+1. `navigate` to `https://www.apec.fr/candidat/mon-espace.html`, `wait` ~2s.
+2. If the page shows a login form, a CAPTCHA, or any bot-challenge screen instead of "Bonjour [name]": **stop immediately, do not retry, do not attempt login.** Leave all APEC `manual_check` rows untouched (the Step 4 fallback message will tell the user to check apec.fr manually) and report `"APEC Chrome extraction: session not authenticated or blocked — skipped"` in the Step 4 report.
+3. Read the "Mes recherches" panel (use `read_page` filter `interactive`, or `find` with query "saved search alert links") and collect each saved search's name (e.g. "Alert 1 — RAF / Finance générale") and its offer count.
+4. For each saved search, in turn:
+   a. Click into it, then click "Consulter les offres" (`find` query "Consulter les offres button").
+   b. `wait` ~2s, then extract listing cards. Try `read_page` (filter `interactive`, which also returns `href`s) first; if the cards don't come through cleanly, fall back to `computer` screenshot + `scroll` (repeat scroll+screenshot until reaching the bottom of the results or 40 listings, whichever comes first — cap at 40 per saved search and note truncation in `parse_notes` if the search has more).
+   c. Per listing, capture: `job_title`, `company`, `location`, `salary` (raw text as shown, e.g. `"€70,000 - €80,000 gross annual salary"`), `contract_type` (from the card's contract tag), posted date, and `job_url` (the card's link `href` if `read_page` returned one — a direct offer link — else `'Not available'`).
+5. **Dedup each extracted listing before insert** (same pattern as the URL-dedup block above, extended for APEC's usually-missing URL):
+   - If `job_url != 'Not available'`: run the URL-dedup query from Step 3's INSERT rules above (checks `listing_inbox` last 7 days + `job_applications`, unbounded) — skip (count as `url_dedup`) if it returns a row.
+   - Else: strip H/F, "(multi-sites)", and seniority suffixes from `job_title` per `.claude/rules/scoring.md` §5, then check:
+     ```sql
+     SELECT id FROM (
+       SELECT id FROM listing_inbox WHERE source='APEC' AND company ILIKE $1 AND job_title ILIKE $2 AND user_profile=$3
+       UNION ALL
+       SELECT id FROM job_applications WHERE company ILIKE $1 AND job_title ILIKE $2 AND user_profile=$3
+       UNION ALL
+       SELECT id FROM review_queue WHERE company ILIKE $1 AND job_title ILIKE $2 AND user_profile=$3
+     ) t LIMIT 1
+     ```
+     Pass `['%<company>%', '%<core_role_phrase>%', USER_PROFILE]`. Skip (count as `apec_dedup`) if a row returns.
+6. INSERT surviving listings:
+   ```sql
+   INSERT INTO listing_inbox
+   (parse_date, source, alert_keyword, job_title, company, location, salary, job_url,
+    contract_type, parse_status, parse_notes, english, raw_snippet, raw_body, user_profile)
+   VALUES ($1,'APEC',$2,$3,$4,$5,$6,$7,$8,'structured',$9,$10,$11,$12,$13)
+   ```
+   - `parse_date` = today (currentDate, not the digest email's date — this row reflects what's live on apec.fr right now)
+   - `alert_keyword` = the saved search name (e.g. `"Alert 1 — RAF / Finance générale"`)
+   - `parse_notes` = `'APEC — Chrome-extracted from saved search "[alert_keyword]"'`
+   - `english` = true if the listing title/description reads as English
+   - `raw_snippet` / `raw_body` = the card's visible description text (or title+company+location if no snippet shown), truncated to 500 / 8000 chars
+   - `gmail_thread_url` = omit/null — this row is site-sourced, not tied to one email
+   - `$13` = USER_PROFILE
+7. After all saved searches are processed (or after step 2's early stop), mark today's APEC stub rows resolved:
+   ```sql
+   UPDATE listing_inbox SET parse_status='processed', parse_notes=parse_notes || ' — superseded by Step 5b structured extraction' WHERE source='APEC' AND parse_status='manual_check' AND user_profile=$1
+   ```
+   Skip this UPDATE if step 2 stopped early (session blocked) — leave the stubs as `manual_check` so the Step 4 fallback fires.
+
+**Never**, under any circumstances in this step: enter or attempt to fill in an APEC password, click "Postuler"/apply/submit on any listing, click "Supprimer" on a saved search, or retry past a bot-challenge/CAPTCHA with a different approach (rotating user agent, waiting and re-navigating repeatedly, etc.) — stop and report instead.
