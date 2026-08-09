@@ -32,6 +32,10 @@ Thumbs.db
 .claude/cache/
 .claude/sessions/
 .claude/history*
+.claude/settings.local.json
+
+# Raw email / scrape dumps (may contain auth tokens in URLs)
+extract*.txt
 
 # Application documents — personal/sensitive, not for version control
 applications/

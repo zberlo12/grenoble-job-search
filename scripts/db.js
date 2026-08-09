@@ -34,7 +34,19 @@ const path = require('path');
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
 function loadConfig() {
-  return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+  const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+  const envConn = process.env.PG_CONN || process.env.SUPABASE_CONNECTION_STRING;
+  if (envConn) cfg.supabase_connection_string = envConn;
+  return cfg;
+}
+
+const REST_TABLE_RE = /^[a-z_][a-z0-9_]*$/;
+
+function assertRestTable(table) {
+  if (!REST_TABLE_RE.test(table)) {
+    console.error('Invalid table name for REST mode.');
+    process.exit(1);
+  }
 }
 
 function isRestMode() {
@@ -108,6 +120,7 @@ function restHeaders(extra) {
 }
 
 async function restSelect(table, qs) {
+  assertRestTable(table);
   const url = `${process.env.SUPABASE_URL}/rest/v1/${table}?${qs}`;
   const res = await fetch(url, { headers: restHeaders() });
   console.log(await res.text());
@@ -115,6 +128,7 @@ async function restSelect(table, qs) {
 }
 
 async function restInsert(table, jsonRow) {
+  assertRestTable(table);
   const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: restHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
@@ -125,6 +139,7 @@ async function restInsert(table, jsonRow) {
 }
 
 async function restUpdate(table, filterQs, jsonPatch) {
+  assertRestTable(table);
   const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${table}?${filterQs}`, {
     method: 'PATCH',
     headers: restHeaders({ 'Content-Type': 'application/json' }),
@@ -135,6 +150,7 @@ async function restUpdate(table, filterQs, jsonPatch) {
 }
 
 async function restUpsert(table, jsonRow) {
+  assertRestTable(table);
   const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: restHeaders({

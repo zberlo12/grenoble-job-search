@@ -15,7 +15,7 @@ The goal is to spend your time on decisions and applications — not on manually
 - Tracks the full pipeline from first listing to offer or rejection
 - Handles compliance logging (e.g. France Travail job seeker reporting)
 
-**Tech stack:** Claude AI · Supabase (PostgreSQL) · Gmail · Indeed API · Notion (onboarding only) · Google Calendar
+**Tech stack:** Claude AI · Supabase (PostgreSQL) · Gmail · Indeed API · Notion (onboarding only) · Google Calendar · Slack (Cowork-side notifications only — see `SLACK_INTEGRATION_PLAN.md`)
 
 ---
 

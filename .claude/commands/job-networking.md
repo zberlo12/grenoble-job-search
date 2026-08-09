@@ -53,7 +53,7 @@ If `$ARGUMENTS` is a company or person name: jump straight to Option 3 or look u
 
 Ask: "Who did you speak with?" (accept name or number from the follow-up list)
 Ask: "What did you discuss? (1–2 sentences)"
-Ask: "When should you follow up again? (e.g. 'in 2 weeks', '15 May', or 'skip')"
+Ask: "When should you follow up again? (e.g. 'in 2 weeks', '15 May') — defaults to 2 weeks from today if you just hit Enter. Type 'skip' only if this contact genuinely needs no follow-up (e.g. a dead end)."
 
 Update the row:
 ```sql
@@ -82,7 +82,7 @@ Ask for (one at a time):
 3. Their role/title
 4. How you know them (Former colleague / Recruiter / Friend / LinkedIn / Other)
 5. Any notes about this contact
-6. "When do you want to follow up? (optional)"
+6. "When do you want to follow up? Defaults to 2 weeks from today if you just hit Enter — type 'skip' only if this contact needs no follow-up."
 
 ```sql
 INSERT INTO networking_contacts

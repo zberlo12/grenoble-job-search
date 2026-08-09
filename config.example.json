@@ -1,0 +1,26 @@
+{
+  "supabase_url": "https://YOUR_PROJECT_REF.supabase.co",
+  "supabase_connection_string": "postgresql://postgres.YOUR_PROJECT_REF:YOUR_DB_PASSWORD@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
+  "pg_module_path": "pg",
+  "user": {
+    "name": "Your Name",
+    "email": "you@example.com",
+    "profile_id": "your_profile_id",
+    "base_city": "Grenoble",
+    "salary_floor_apply": 70000,
+    "salary_floor_reject": 55000
+  },
+  "background": {},
+  "location_zones": {},
+  "job_titles": [],
+  "gmail": { "alert_sources": [] },
+  "browser_extraction": {},
+  "cv_approaches": {},
+  "lifecycle_rules": {},
+  "notion": {},
+  "france_travail_api": {
+    "client_id": null,
+    "client_secret": null,
+    "token_url": "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
+  }
+}

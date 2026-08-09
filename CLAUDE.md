@@ -49,7 +49,7 @@ archive/              # retired one-off scripts and data exports, kept for refer
 
 `.mcp.json` is gitignored — it contains the live Notion API token. `.mcp.json.template` is the versioned, token-free reference.
 
-**Known issue (flagged, not yet fixed):** `config-zack.json` and `config-natalie.json` are tracked in this (public) git repository and contain a plaintext Supabase database password. This matches `IMPROVEMENT-PLAN.md` Phase 0, which was never executed. Do not add any new file containing credentials to git — `.gitignore` now blocks `config-*.json` and `identifiants*.json` going forward, but the existing history is not yet scrubbed and the password is not yet rotated.
+**Credentials:** Never commit `config.json`, `config-*.json`, `.env*`, `.mcp.json`, or raw email dumps. Use `config.example.json` as the template. If a database password was ever pushed, follow **SECURITY.md** (rotate password, optional history purge). Legacy copies may still exist in old git commits until history is rewritten.
 
 ## Skill File Format
 
@@ -76,6 +76,7 @@ allowed-tools: comma-separated list of MCP tool IDs
 The `.mcp.json` file contains the Notion API token and local MCP server config, for the same onboarding-only purpose as above.
 
 - `mcp__supabase__*` — official Supabase MCP server, added to `.mcp.json` (project-scoped to `ginjhaioodmaqfajtinv`, `read_only=true`, OAuth login via `claude /mcp` — no token stored in the file). This is for **interactive, ad-hoc querying only** (e.g. "what's in my review queue right now"). It does not replace `scripts/db.js`, which remains the only DB access path used *inside* skills — see `.claude/rules/db.md`. Read-only by design: this project's Supabase data is production, not a dev/test project, so per Supabase's own MCP security guidance it should never be given write access from an interactive assistant session.
+- **Slack** — not a local MCP entry; connected on the Cowork side (Anthropic's desktop agent) via its own account-level connector, not `.mcp.json`. Used for push notifications and a mobile status canvas against this same Supabase project — see `SLACK_INTEGRATION_PLAN.md` for the phased plan. This is **not** a skill and has no `.claude/commands/` entry: if you're extending job-search logic, Slack automations run independently on the Cowork side and should never become the source of truth for scoring — `.claude/rules/scoring.md` stays that, regardless of which side is reading it.
 
 ## User Profile & Config
 
