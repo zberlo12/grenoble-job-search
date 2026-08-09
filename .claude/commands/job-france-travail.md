@@ -106,11 +106,11 @@ If found → skip. Count skipped entries separately.
 INSERT INTO france_travail_log
 (action, date, categorie, priorite, entreprise, poste_sujet, mode, source,
  statut_declaration, notes, job_application_id, contact_id, user_profile)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'À déclarer', $9, $10, $11, $12)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'A declarer', $9, $10, $11, $12)
 RETURNING id
 ```
 
-All new entries default to `statut_declaration = 'À déclarer'`.
+All new entries default to `statut_declaration = 'A declarer'`.
 Pass `job_application_id` for candidature entries, `contact_id` for réseau entries, `NULL` otherwise. Final param is `USER_PROFILE`.
 
 ### Monthly standing entries
@@ -137,7 +137,7 @@ VALUES (
   date_trunc('month', CURRENT_DATE),
   'Administratif', 'Optionnel',
   'Bilan mensuel de recherche d''emploi',
-  'En ligne', 'Auto-Mensuel', 'À déclarer',
+  'En ligne', 'Auto-Mensuel', 'A declarer',
   'Entrée mensuelle automatique', '<USER_PROFILE>'
 )
 ON CONFLICT DO NOTHING RETURNING id;
@@ -150,7 +150,7 @@ VALUES (
   date_trunc('month', CURRENT_DATE),
   'Administratif', 'Optionnel',
   'Relances et suivis — bilan mensuel',
-  'En ligne', 'Auto-Mensuel', 'À déclarer',
+  'En ligne', 'Auto-Mensuel', 'A declarer',
   'Entrée mensuelle automatique', '<USER_PROFILE>'
 )
 ON CONFLICT DO NOTHING RETURNING id;
@@ -197,8 +197,8 @@ Prompt the user in order (accept any format for date):
 5. **Mode of contact** (Email / Téléphone / Visio / Présentiel / En ligne / Courrier)
 6. **Notes** (optional — press Enter to skip)
 7. **Declare to France Travail?** — suggest based on Priorité:
-   - If Obligatoire or Impactant: suggest `À déclarer`
-   - If Optionnel: suggest `Exclu` but let Zack override to `À déclarer`
+   - If Obligatoire or Impactant: suggest `A declarer`
+   - If Optionnel: suggest `Exclu` but let Zack override to `A declarer`
 
 Auto-assign Priorité based on the category chosen (see mapping above).
 Auto-generate the Action title: `[Catégorie] — [Poste/Sujet] @ [Entreprise]` (omit @ part if no Entreprise).
@@ -263,7 +263,7 @@ SELECT id, action, date, categorie, priorite, entreprise, poste_sujet, mode,
 FROM france_travail_log
 WHERE (date AT TIME ZONE '<TZ>')::date BETWEEN $1 AND $2
   AND priorite = ANY($3)           -- ['Obligatoire'] or ['Obligatoire','Impactant'] or all
-  AND statut_declaration = ANY($4) -- ['À déclarer'] or ['Déclaré'] or ['À déclarer','Déclaré'] or all
+  AND statut_declaration = ANY($4) -- ['A declarer'] or ['Declare'] or ['A declarer','Declare'] or all
   AND user_profile = $5
 ORDER BY date ASC
 ```
@@ -282,7 +282,7 @@ ORDER BY ft.date ASC
 
 ### Step 2c-i — Check for missing France Travail fields
 
-Before generating the report, check each `À déclarer` entry against the required fields for its category (see **France Travail portal fields** section below). If any required fields are missing, prompt Zack to fill them in before continuing — do this in batch, one entry at a time:
+Before generating the report, check each `A declarer` entry against the required fields for its category (see **France Travail portal fields** section below). If any required fields are missing, prompt Zack to fill them in before continuing — do this in batch, one entry at a time:
 
 ```
 Missing info for 2 entries:
@@ -406,7 +406,7 @@ If zero entries match, say so and suggest running a sync first.
 
 ### Step 2c-iii — Per-line triage
 
-After displaying the full list, go through each `À déclarer` entry **one at a time** and ask Zack what to do with it. Collect all IDs for each decision as you go.
+After displaying the full list, go through each `A declarer` entry **one at a time** and ask Zack what to do with it. Collect all IDs for each decision as you go.
 
 For each entry show a compact summary and three options:
 
@@ -436,7 +436,7 @@ On confirmation:
 1. Update Exclu entries: `UPDATE france_travail_log SET statut_declaration='Exclu' WHERE id=ANY($1)`
    Pass the array of IDs marked X.
 2. Leave D entries unchanged.
-3. Draft the email — do NOT mark R entries as `Déclaré` yet (Zack marks them after actually entering into France Travail).
+3. Draft the email — do NOT mark R entries as `Declare` yet (Zack marks them after actually entering into France Travail).
 
 **Positions Reviewed log entry:** After the triage confirmation, if the Positions Reviewed block showed any scan or review activity, offer:
 > "Add a Présélection entry to the FT log for this week's review activity? [Y/N]"
@@ -446,7 +446,7 @@ If Y, INSERT into france_travail_log:
 ```sql
 INSERT INTO france_travail_log
 (action, date, categorie, priorite, poste_sujet, mode, source, statut_declaration, notes, user_profile)
-VALUES ($1, $2, 'Présélection', 'Optionnel', $3, 'En ligne', 'Auto-Revue', 'À déclarer', $4, $5)
+VALUES ($1, $2, 'Présélection', 'Optionnel', $3, 'En ligne', 'Auto-Revue', 'A declarer', $4, $5)
 RETURNING id
 ```
 Pass `['Présélection — Revue d\'offres d\'emploi', period_end_date, 'Revue de [X] offres — [Y] retenues, [Z] écartées', commentaire_ft, USER_PROFILE]`.
@@ -505,7 +505,7 @@ Options:
 
 If **M**: update all R-triage entries:
 ```sql
-UPDATE france_travail_log SET statut_declaration='Déclaré' WHERE id=ANY($1)
+UPDATE france_travail_log SET statut_declaration='Declare' WHERE id=ANY($1)
 ```
 Pass the array of IDs that were marked R in the triage. Confirm count.
 
