@@ -75,6 +75,8 @@ allowed-tools: comma-separated list of MCP tool IDs
 **Local backup** (`.mcp.json` has token — `mcp__notion__*` tools if local server runs):
 The `.mcp.json` file contains the Notion API token and local MCP server config, for the same onboarding-only purpose as above.
 
+- `mcp__supabase__*` — official Supabase MCP server, added to `.mcp.json` (project-scoped to `ginjhaioodmaqfajtinv`, `read_only=true`, OAuth login via `claude /mcp` — no token stored in the file). This is for **interactive, ad-hoc querying only** (e.g. "what's in my review queue right now"). It does not replace `scripts/db.js`, which remains the only DB access path used *inside* skills — see `.claude/rules/db.md`. Read-only by design: this project's Supabase data is production, not a dev/test project, so per Supabase's own MCP security guidance it should never be given write access from an interactive assistant session.
+
 ## User Profile & Config
 
 All user-specific configuration lives in `config.json` (gitignored) — **not** in Notion, and not in this file.

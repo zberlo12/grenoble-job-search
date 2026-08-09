@@ -6,6 +6,10 @@
       "env": {
         "NOTION_API_TOKEN": "secret_YOUR_NOTION_TOKEN_HERE"
       }
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT_REF_HERE&read_only=true&features=database,docs,debugging,development"
     }
   },
   "notion_config_page_id": "YOUR_USER_PROFILE_PAGE_ID_HERE",
