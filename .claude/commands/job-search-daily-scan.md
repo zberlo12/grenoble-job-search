@@ -90,6 +90,8 @@ ORDER BY created_at ASC
 
 **For each pending row, run two SQL checks before any analysis. Both use direct DB queries — no in-memory matching.**
 
+**Day tally:** Maintain an in-memory map `dayTally[row.parse_date]` for every row this run touches — never a single running total keyed to today. Each entry accumulates `{total_found, potentially_apply, needs_info, to_assess, dismissed}`. Every row (duplicate or not) increments `total_found` under its own `row.parse_date` — the listing's day, not the day the scan happens to run.
+
 **Check 1 — URL match (hard dedup):**
 ```sql
 SELECT id FROM (
@@ -98,7 +100,7 @@ SELECT id FROM (
   SELECT id FROM review_queue WHERE job_url=$1 AND user_profile=$2
 ) t LIMIT 1
 ```
-Pass `[row.job_url, USER_PROFILE]`. If any row returned → definite duplicate. Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
+Pass `[row.job_url, USER_PROFILE]`. If any row returned → definite duplicate. Mark `parse_status='processed'`, increment `dayTally[row.parse_date].total_found`, skip to next row.
 
 **Check 2 — Company + title match (ILIKE):**
 Extract the core role phrase from `row.job_title`: strip H/F, (multi-sites), Multisites, seniority suffixes, and parenthetical qualifiers. Keep the primary role noun phrase (e.g. "Responsable Administratif Financier", "Contrôleur de Gestion", "Directeur Financier").
@@ -115,7 +117,7 @@ SELECT id FROM (
     AND user_profile=$3
 ) t LIMIT 1
 ```
-Pass `['%<company>%', '%<core_role_phrase>%', USER_PROFILE]`. If any row returned → duplicate (same company, same role family, re-post from different source — includes Dismissed/Rejected entries). Mark `parse_status='processed'`, increment duplicate counter, skip to next row.
+Pass `['%<company>%', '%<core_role_phrase>%', USER_PROFILE]`. If any row returned → duplicate (same company, same role family, re-post from different source — includes Dismissed/Rejected entries). Mark `parse_status='processed'`, increment `dayTally[row.parse_date].total_found`, skip to next row.
 
 If both checks return empty → not a duplicate. Proceed with analysis (Step 3b onward).
 
@@ -135,6 +137,8 @@ Read `.claude/rules/scoring.md` §1 (Location Zones) and §3 (Priority Criteria)
 | Priority B/C | `review_queue` | `To Assess` |
 | Rescue gate (Needs Info) | `review_queue` | `Needs Info` |
 | Dismissed | `job_applications` | `Dismissed` |
+
+After each INSERT, increment the matching field in `dayTally[row.parse_date]` — `potentially_apply` for Priority A, `to_assess` for Priority B/C, `needs_info` for the rescue gate, `dismissed` for Dismissed. `total_found` was already incremented in Step 3a — do not double-count it here.
 
 **⚠ MANDATORY BEFORE EVERY INSERT: `listing_inbox_id` MUST equal `row.id` (the integer PK of the listing_inbox row being processed). Never null, never omitted. It is the only trace back to the source email. If you do not have a concrete integer value, stop and fix it before inserting.**
 
@@ -206,7 +210,7 @@ Run one INSERT per new company. Track total inserted for the digest.
 
 ### 4a — scan_archive
 
-Use today's date (`currentDate` from context) as `scan_date`.
+**Write one row per distinct day in `dayTally`, never a single row keyed to today.** A single run of this skill can (and often does, when catching up a backlog) touch listings spanning many different `parse_date`s — each one gets its own `scan_archive` row dated to that listing's actual day. Loop over every key in `dayTally` built during Steps 3a/3d and run one upsert per key:
 
 ```sql
 INSERT INTO scan_archive
@@ -214,15 +218,17 @@ INSERT INTO scan_archive
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 ON CONFLICT (scan_date, user_profile) DO UPDATE SET
   digest_text=EXCLUDED.digest_text,
-  total_found=EXCLUDED.total_found,
-  potentially_apply=EXCLUDED.potentially_apply,
-  needs_info=EXCLUDED.needs_info,
-  to_assess=EXCLUDED.to_assess,
-  dismissed=EXCLUDED.dismissed
+  total_found=scan_archive.total_found + EXCLUDED.total_found,
+  potentially_apply=scan_archive.potentially_apply + EXCLUDED.potentially_apply,
+  needs_info=scan_archive.needs_info + EXCLUDED.needs_info,
+  to_assess=scan_archive.to_assess + EXCLUDED.to_assess,
+  dismissed=scan_archive.dismissed + EXCLUDED.dismissed
 ```
-Pass `[today, digest_text, total_new, priority_a_count, needs_info_count, to_assess_count, dismissed_count, USER_PROFILE]`.
+Pass `[dayKey, digestTextForThisDay, tally.total_found, tally.potentially_apply, tally.needs_info, tally.to_assess, tally.dismissed, USER_PROFILE]` per day. Counts now **add** on conflict rather than overwrite — a day that gets touched across more than one run (e.g. a backlog day revisited later) accumulates instead of losing earlier totals.
 
-`total_new` = all rows written (excluding duplicates). `needs_info_count` includes rescue gate rows only (manual_check routing via Step 2 removed — HTML-only emails now handled via Chrome).
+`digestTextForThisDay`: use the full digest text (built in 4b) only for the row matching `currentDate` (today's own listings); for every other day pass `NULL` — those rows record counts, not a re-narrated digest, since the digest email is about *this run*, not a historical reconstruction of that day.
+
+`total_found` = all rows (including duplicates) with that `parse_date`. `needs_info` includes rescue gate rows only (manual_check routing via Step 2 removed — HTML-only emails now handled via Chrome).
 
 ### 4b — Gmail draft digest
 
