@@ -1,5 +1,5 @@
 ---
-description: Email pre-processor — reads yesterday's job alert emails from Gmail, parses every listing, writes raw rows to listing_inbox staging table. No scoring, no routing. Runs nightly at 3 AM (scans the previous day). Trigger with /job-email-inbox.
+description: Email pre-processor — reads yesterday's job alert emails from Gmail, parses every listing, writes raw rows to listing_inbox staging table. Also sweeps Gmail for responses (rejection/interview/offer) on open applications. No scoring, no routing of new listings. Runs nightly at 3 AM (scans the previous day). Trigger with /job-email-inbox.
 argument-hint: Optional date override in MM/DD/YY format (e.g. 04/23/26). Default: yesterday.
 allowed-tools: mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, Bash
 ---
@@ -171,6 +171,30 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 
 ---
 
+## Step 3g — Application Response Sweep (canonical: `/job-status` Step 2 — do not restate its logic here)
+
+This is the fix for a real gap found on 2026-08-24: with no scheduled trigger active (see `OVERVIEW.md` § Scheduling), response detection only ever ran when someone remembered to run `/job-status` by hand, so rejection emails sat unprocessed for weeks. Folding the sweep into this skill means it runs every time the inbox is scanned — nightly once a trigger exists, or whenever run interactively — instead of depending on a separate manual step.
+
+Fetch open applications:
+```sql
+SELECT id, job_title, company, status, date_applied, date_added, gmail_thread_url, notes
+FROM job_applications
+WHERE status IN ('Applied','Interview') AND user_profile=$1
+```
+
+If 0 rows, skip this step entirely (note `response_sweep: 0 open applications` in the Step 4 report).
+
+For each row, run the **exact same Gmail search + classification** as `/job-status` Step 2 (search query, Interview/Offer/Rejected/Unknown keyword classification, human-contact detection into `networking_contacts`). Do not diverge from that logic — if it needs to change, change it in `/job-status` and this step inherits it by reference.
+
+**Auto-apply policy (this step runs unattended — no interactive confirmation available):**
+- Classification is **Interview**, **Offer**, or **Rejected** (a clear keyword match, not Unknown) → apply the matching update immediately using the exact SQL from `/job-status` Step 5's update table (e.g. `Applied/Interview → Rejected`). No confirmation prompt.
+- Classification is **Unknown** (a response-shaped email found but not classifiable) → do NOT change status. Add to the Step 4 report under "Needs manual review" with the row id, company, and thread link, for the next `/job-status` run.
+- Apply the same **auto-expiry** and **follow-up nudge** checks from `/job-status` Step 2 while you're already iterating this row set, and fold their results into the Step 4 report the same way.
+
+Track counts: `rejections_found`, `interviews_found`, `offers_found`, `needs_manual_review`, `auto_expired`.
+
+---
+
 ## Step 4 — Report
 
 ```
@@ -187,6 +211,13 @@ Listings written to listing_inbox:
   url_dedup:            [N]  (same URL seen in last 7 days — skipped)
   manual_check:         [N]  (APEC only — visit apec.fr manually)
   errors:               [N]  (if any INSERT failed — list them)
+
+Application response sweep ([N] open applications checked):
+  Rejections found:     [N]  [title @ company, for each]
+  Interviews found:     [N]  [title @ company, for each]
+  Offers found:         [N]  [title @ company, for each]
+  Auto-expired:         [N]  (no response after threshold — see /job-status)
+  Needs manual review:  [N]  (ambiguous response — confirm via /job-status)
 
 [If puppeteer_pending > 0 AND running as remote trigger:]
 HTML-only emails queued (extracted automatically via Chrome on next interactive run — Step 5 requires a live session):

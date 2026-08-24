@@ -196,13 +196,13 @@ To adapt the system for a different user: run `/job-user-setup` — it walks thr
 |-------|---------|-------------|
 | `/job-user-setup` | Once | Full setup: profile, config, Notion onboarding page, optional scheduled triggers |
 | `/job-morning` | Daily | Read-only morning digest — scan results + pipeline state |
-| `/job-email-inbox` | Manual (or scheduled) | Parse Gmail job alerts → `listing_inbox` |
+| `/job-email-inbox` | Manual (or scheduled) | Parse Gmail job alerts → `listing_inbox`; also sweeps Applied/Interview rows for responses (canonical logic in `/job-status`) |
 | `/job-scan-ft` | Manual, on-demand | Fetch structured offers from the France Travail API → `listing_inbox` |
 | `/job-search-daily-scan` | Manual (or scheduled) | Score + route `listing_inbox` → Supabase, Gmail digest |
 | `/job-review` | 2–3×/week | Drain review queue: enrich Needs Info, confirm To Assess |
 | `/job-shortlist` | Weekly | Go/no-go pass on the Potentially Apply holding queue |
 | `/job-apply` | Per listing | Pre-flight checks + draft tailored CV + cover letter |
-| `/job-status` | As needed | Sole owner of response detection: interview, rejection, offer, follow-ups |
+| `/job-status` | As needed | Canonical response-detection logic (interview, rejection, offer, follow-ups) — also run unattended inside `/job-email-inbox`; use this one interactively to confirm ambiguous matches and make manual overrides |
 | `/job-interview-prep` | Before interview | Full briefing pack |
 | `/job-search` | As needed | Analyse a pasted listing |
 | `/job-search-indeed` | As needed | Manual Indeed sweep (local / remote / both) |

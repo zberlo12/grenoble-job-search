@@ -31,7 +31,9 @@ If no rows returned, say "No active applications — queue is clear." and stop.
 
 ---
 
-## Step 2 — Gmail Response Sweep (silent)
+## Step 2 — Gmail Response Sweep (silent) — canonical
+
+**This is the canonical version of the response-detection logic.** `/job-email-inbox` Step 3g runs this same search + classification unattended (auto-applying Interview/Offer/Rejected, flagging Unknown for review here) so it isn't only checked when someone remembers to run this skill by hand. If you change the search query or classification rules below, `/job-email-inbox` inherits the change automatically — do not fork a second copy of this logic there.
 
 For each row with Status = `Applied` or `Interview`, search Gmail for response emails received **after** the `date_applied` (fallback to `date_added`):
 
