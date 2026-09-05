@@ -582,7 +582,7 @@ Ask:
 > This gives you your first results straight away rather than waiting until tomorrow morning.
 > (yes / no)"
 
-If yes: run `/job-search-indeed` with "both" scope.
+If yes: run `/job-scan-indeed` with "both" scope.
 
 ### Step D — Profile completeness
 

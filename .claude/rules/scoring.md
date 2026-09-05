@@ -1,7 +1,7 @@
 # Scoring Rules — Single Source of Truth
 
 Read this file before scoring any listing, in every skill that ranks or routes a listing:
-`/job-search`, `/job-search-daily-scan`, `/job-search-indeed`, `/job-search-target-companies`, `/job-review`.
+`/job-search`, `/job-search-daily-scan`, `/job-scan-indeed`, `/job-search-target-companies`, `/job-review`.
 
 **Every threshold below is a reference to a `config.json` key — never hardcode a number or a city list inline.** If a skill needs a value from here, it reads it from config at Step 0, the same way it already reads `salary_floor_apply`. If this file and `config.json` ever disagree, config.json wins — flag the mismatch and fix this file, don't silently follow the stale copy.
 
@@ -78,6 +78,6 @@ If either check returns a row → duplicate. Do not re-score, do not re-insert.
 
 These stay in their own skill file — they're genuinely source-specific, not scoring drift:
 
-- **`/job-search-indeed`** — adjacent-title recognition: roles like "Responsable de Gestion", "Gestionnaire Financier Senior", "Finance & Operations Manager" that don't literally match a title in §2 but plausibly are finance leadership. Check role content before skipping on title alone.
+- **`/job-scan-indeed`** — adjacent-title recognition: roles like "Responsable de Gestion", "Gestionnaire Financier Senior", "Finance & Operations Manager" that don't literally match a title in §2 but plausibly are finance leadership. Check role content before skipping on title alone.
 - **`/job-search-daily-scan`** — the operational-role gate (§2) matters most here, since Gmail alerts surface a wider net of adjacent-function roles than a manual paste or a targeted Indeed search does.
 - **`/job-review`** — the rescue gate (§2) does **not** reapply during re-ranking (its Step 3). An enriched row gets a final A/B/C/Skip from §3 alone, using the freshly-completed data.

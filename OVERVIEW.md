@@ -89,7 +89,7 @@ git clone https://github.com/zberlo12/grenoble-job-search
 
 ### Phase 1 — Prime the Pump *(run once, day 1)*
 
-**Step 4.** `/job-search-indeed both` — sweeps Indeed for local and remote listings right now, before the first email alert arrives. Puts your first 20–40 listings into the pipeline immediately.
+**Step 4.** `/job-scan-indeed both` — sweeps Indeed for local and remote listings right now, before the first email alert arrives. Puts your first 20–40 listings into the pipeline immediately.
 
 ---
 
@@ -148,7 +148,7 @@ git clone https://github.com/zberlo12/grenoble-job-search
 | Command | When to use |
 |---------|-------------|
 | `/job-search [paste listing]` | Found a listing outside your email alerts — paste it and get instant analysis + logging |
-| `/job-search-indeed local/remote/both` | Manual sweep of Indeed on demand |
+| `/job-scan-indeed local/remote/both` | Manual sweep of Indeed on demand |
 | `/job-search-target-companies` | Checks Tier A/B company careers pages for unlisted openings |
 | `/job-qualify-companies` | Lightweight research on Tier C companies — promote to A/B or drop to D |
 | `/job-networking` | Log a conversation with a contact, set a follow-up reminder, find who you know at a company |
@@ -205,7 +205,7 @@ To adapt the system for a different user: run `/job-user-setup` — it walks thr
 | `/job-status` | As needed | Sole owner of response detection: interview, rejection, offer, follow-ups |
 | `/job-interview-prep` | Before interview | Full briefing pack |
 | `/job-search` | As needed | Analyse a pasted listing |
-| `/job-search-indeed` | As needed | Manual Indeed sweep (local / remote / both) |
+| `/job-scan-indeed` | As needed | Manual Indeed sweep (local / remote / both) |
 | `/job-search-target-companies` | Weekly | Check Tier A/B careers pages |
 | `/job-qualify-companies` | As needed | Research Tier C companies — promote or drop |
 | `/job-company-research` | As needed | Deep-dive on a specific company |
