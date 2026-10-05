@@ -69,7 +69,7 @@ function pausedMessage() {
 async function connectWithDiagnostic(client, cfg) {
   try {
     await client.connect();
-    return;
+    return client;
   } catch (err) {
     const paused = await checkPaused(cfg.supabase_url);
     if (paused) {
@@ -77,21 +77,52 @@ async function connectWithDiagnostic(client, cfg) {
       process.exit(1);
     }
     // Project is active (401 on REST root) — the failure was transient, retry once.
-    await client.connect();
+    // A pg Client that already attempted connect() cannot be reused (throws
+    // "Client has already been connected"), so retry with a fresh instance.
+    const { Client } = require(cfg.pg_module_path);
+    const retryClient = new Client({ connectionString: cfg.supabase_connection_string });
+    await retryClient.connect();
+    return retryClient;
   }
 }
 
 async function runQuery(sql, params) {
   const cfg = loadConfig();
   const { Client } = require(cfg.pg_module_path);
-  const client = new Client({ connectionString: cfg.supabase_connection_string });
-  await connectWithDiagnostic(client, cfg);
+  const client = await connectWithDiagnostic(new Client({ connectionString: cfg.supabase_connection_string }), cfg);
   try {
     const result = await client.query(sql, params);
     console.log(JSON.stringify(result.rows));
   } finally {
     await client.end();
   }
+}
+
+// Runs many statements on ONE connection — avoids the connect/disconnect churn
+// of spawning a fresh `node db.js query` process per statement, which can
+// exhaust the Supabase pooler on batches of dozens of rows.
+// statementsFile: path to a JSON file containing [{sql, params}, ...].
+// Each statement's rows (or an error message) are collected and printed as
+// one JSON array at the end; a failure in one statement does not abort the rest.
+async function runBatch(statementsFile) {
+  const statements = JSON.parse(fs.readFileSync(statementsFile, 'utf-8'));
+  const cfg = loadConfig();
+  const { Client } = require(cfg.pg_module_path);
+  const client = await connectWithDiagnostic(new Client({ connectionString: cfg.supabase_connection_string }), cfg);
+  const results = [];
+  try {
+    for (const { sql, params } of statements) {
+      try {
+        const result = await client.query(sql, params || []);
+        results.push({ ok: true, rows: result.rows });
+      } catch (err) {
+        results.push({ ok: false, error: err.message });
+      }
+    }
+  } finally {
+    await client.end();
+  }
+  console.log(JSON.stringify(results));
 }
 
 async function runHealth() {
@@ -105,8 +136,7 @@ async function runHealth() {
   }
   const cfg = loadConfig();
   const { Client } = require(cfg.pg_module_path);
-  const client = new Client({ connectionString: cfg.supabase_connection_string });
-  await connectWithDiagnostic(client, cfg);
+  const client = await connectWithDiagnostic(new Client({ connectionString: cfg.supabase_connection_string }), cfg);
   await client.end();
   console.log('ok (direct)');
 }
@@ -171,6 +201,7 @@ async function main() {
     return runQuery(a, params);
   }
   if (cmd === 'health') return runHealth();
+  if (cmd === 'batch') return runBatch(a);
 
   if (!isRestMode()) {
     console.error(`"${cmd}" requires REST mode (SUPABASE_URL + SUPABASE_KEY env vars). Use "query" for direct Postgres.`);
@@ -184,7 +215,7 @@ async function main() {
   }
   if (cmd === 'upsert') return restUpsert(a, b);
 
-  console.error('Usage: node scripts/db.js <query|health|select|insert|update|upsert> ...');
+  console.error('Usage: node scripts/db.js <query|health|batch|select|insert|update|upsert> ...');
   process.exit(1);
 }
 
